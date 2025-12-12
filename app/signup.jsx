@@ -1,15 +1,24 @@
-import { Link } from "expo-router";
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function Login() {
+export default function Signup() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Vasu The Mech</Text>
-      <Text style={styles.subtitle}>Login to continue</Text>
+      <Text style={styles.title}>Create Account </Text>
+      <Text style={styles.subtitle}>Join our platform</Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Full Name"
+        placeholderTextColor="#aaa"
+        value={name}
+        onChangeText={setName}
+      />
 
       <TextInput
         style={styles.input}
@@ -28,12 +37,13 @@ export default function Login() {
         onChangeText={setPassword}
       />
 
-      <TouchableOpacity style={styles.loginBtn}>
-        <Text style={styles.loginText}>Login</Text>
+      <TouchableOpacity style={styles.signupBtn}>
+        <Text style={styles.signupText}>Sign Up</Text>
       </TouchableOpacity>
 
       <Text style={styles.bottomText}>
-        Don't have an account? <Link href="/signup" style={{ color: '#007bff' }}>Sign up</Link>
+        Already have an account?{" "}
+        <Link href="/login" style={{ color: '#007bff' }}>Login</Link>
       </Text>
     </View>
   );
@@ -63,14 +73,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 16,
   },
-  loginBtn: {
-    backgroundColor: '#007bff',
+  signupBtn: {
+    backgroundColor: '#28a745',
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
     marginTop: 10,
   },
-  loginText: {
+  signupText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
