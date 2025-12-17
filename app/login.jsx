@@ -1,6 +1,13 @@
 import { Link, useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { supabase } from "../lib/supabase";
 
 export default function Login() {
@@ -9,6 +16,19 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // ✅ Listen to auth state
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        router.replace("/chat"); // ✅ redirect AFTER session exists
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router]); // Added router to dependency array
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -25,12 +45,7 @@ export default function Login() {
 
       if (error) {
         Alert.alert("Login Failed", error.message);
-        return;
       }
-
-      // SUCCESS → redirect to home
-      router.replace("/home");
-
     } catch (err) {
       Alert.alert("Unexpected Error", err.message);
     } finally {
@@ -61,8 +76,14 @@ export default function Login() {
         onChangeText={setPassword}
       />
 
-      <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.loginText}>{loading ? "Logging in..." : "Login"}</Text>
+      <TouchableOpacity
+        style={styles.loginBtn}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        <Text style={styles.loginText}>
+          {loading ? "Logging in..." : "Login"}
+        </Text>
       </TouchableOpacity>
 
       <Text style={styles.bottomText}>

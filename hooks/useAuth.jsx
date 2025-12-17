@@ -11,13 +11,13 @@ export function useAuth() {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
-    );
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
-    return () => listener.subscription.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   return { session, loading };
