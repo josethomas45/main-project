@@ -1,6 +1,13 @@
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { supabase } from "../lib/supabase";
 
 export default function Signup() {
@@ -16,32 +23,29 @@ export default function Signup() {
       return Alert.alert("Error", "Please fill in all fields.");
     }
 
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name },
-        },
-      });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name },
+      },
+    });
 
-      if (error) {
-        Alert.alert("Signup Failed", error.message);
-        return;
-      }
+    setLoading(false);
 
-      Alert.alert("Account Created", "Please check your email for verification.");
-
-      // Redirect to Login screen
-      router.replace("/login");
-
-    } catch (err) {
-      Alert.alert("Unexpected Error", err.message);
-    } finally {
-      setLoading(false);
+    if (error) {
+      Alert.alert("Signup Failed", error.message);
+      return;
     }
+
+    Alert.alert(
+      "Success",
+      "Account created. Please login."
+    );
+
+    router.replace("/login");
   };
 
   return (
@@ -75,8 +79,14 @@ export default function Signup() {
         onChangeText={setPassword}
       />
 
-      <TouchableOpacity style={styles.signupBtn} onPress={handleSignup} disabled={loading}>
-        <Text style={styles.signupText}>{loading ? "Creating..." : "Sign Up"}</Text>
+      <TouchableOpacity
+        style={styles.signupBtn}
+        onPress={handleSignup}
+        disabled={loading}
+      >
+        <Text style={styles.signupText}>
+          {loading ? "Creating..." : "Sign Up"}
+        </Text>
       </TouchableOpacity>
 
       <Text style={styles.bottomText}>
@@ -90,20 +100,9 @@ export default function Signup() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 25,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-  },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 35,
-    color: "#666",
-  },
+  container: { flex: 1, padding: 25, justifyContent: "center" },
+  title: { fontSize: 32, fontWeight: "bold" },
+  subtitle: { fontSize: 16, marginBottom: 35, color: "#666" },
   input: {
     width: "100%",
     padding: 15,
@@ -120,14 +119,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  signupText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  bottomText: {
-    marginTop: 20,
-    textAlign: "center",
-    color: "#444",
-  },
+  signupText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  bottomText: { marginTop: 20, textAlign: "center", color: "#444" },
 });

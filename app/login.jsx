@@ -1,5 +1,5 @@
 import { Link, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   StyleSheet,
@@ -17,40 +17,27 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ✅ Listen to auth state
-  useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        router.replace("/chat"); // ✅ redirect AFTER session exists
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [router]); // Added router to dependency array
-
   const handleLogin = async () => {
     if (!email || !password) {
       return Alert.alert("Error", "Please fill in all fields.");
     }
 
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (error) {
-        Alert.alert("Login Failed", error.message);
-      }
-    } catch (err) {
-      Alert.alert("Unexpected Error", err.message);
-    } finally {
-      setLoading(false);
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Login Failed", error.message);
+      return;
     }
+
+    // ✅ SUCCESS → Go to Chat
+    router.replace("/chat");
   };
 
   return (
@@ -97,20 +84,9 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 25,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-  },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 35,
-    color: "#666",
-  },
+  container: { flex: 1, padding: 25, justifyContent: "center" },
+  title: { fontSize: 32, fontWeight: "bold" },
+  subtitle: { fontSize: 16, marginBottom: 35, color: "#666" },
   input: {
     width: "100%",
     padding: 15,
@@ -127,14 +103,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  loginText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  bottomText: {
-    marginTop: 20,
-    textAlign: "center",
-    color: "#444",
-  },
+  loginText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  bottomText: { marginTop: 20, textAlign: "center", color: "#444" },
 });
