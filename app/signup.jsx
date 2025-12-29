@@ -1,91 +1,52 @@
-import { Link, useRouter } from "expo-router";
+import { useSignUp } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
+import { Link } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "../lib/supabase";
 
-export default function Signup() {
-  const router = useRouter();
-
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+export default function SignUp() {
+  const { signUp, isLoaded } = useSignUp();
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = async () => {
-    if (!name || !email || !password) {
-      return Alert.alert("Error", "Please fill in all fields.");
-    }
+  const handleGoogleSignUp = async () => {
+    if (!isLoaded) return;
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-      },
-    });
-
-    setLoading(false);
-
-    if (error) {
-      Alert.alert("Signup Failed", error.message);
-      return;
+    try {
+      await signUp.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: window.location.origin,
+      });
+      // Navigation will be handled automatically by _layout.jsx
+      console.log("✅ Google sign-up initiated!");
+    } catch (err) {
+      console.error("Google sign-up error:", err);
+      Alert.alert("Sign Up Failed", err.errors?.[0]?.message || "An error occurred");
+    } finally {
+      setLoading(false);
     }
-
-    Alert.alert(
-      "Success",
-      "Account created. Please login."
-    );
-
-    router.replace("/login");
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Join our platform</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name"
-        placeholderTextColor="#aaa"
-        value={name}
-        onChangeText={setName}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#aaa"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#aaa"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      <Text style={styles.subtitle}>Sign up to get started</Text>
 
       <TouchableOpacity
-        style={styles.signupBtn}
-        onPress={handleSignup}
+        style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+        onPress={handleGoogleSignUp}
         disabled={loading}
       >
-        <Text style={styles.signupText}>
-          {loading ? "Creating..." : "Sign Up"}
+        <Ionicons name="logo-google" size={20} color="#fff" style={styles.icon} />
+        <Text style={styles.googleText}>
+          {loading ? "Signing up..." : "Continue with Google"}
         </Text>
       </TouchableOpacity>
 
@@ -100,25 +61,29 @@ export default function Signup() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 25, justifyContent: "center" },
+  container: {
+    flex: 1,
+    padding: 25,
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
   title: { fontSize: 32, fontWeight: "bold" },
   subtitle: { fontSize: 16, marginBottom: 35, color: "#666" },
-  input: {
-    width: "100%",
-    padding: 15,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  signupBtn: {
-    backgroundColor: "#28a745",
+  googleBtn: {
+    backgroundColor: "#4285F4",
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
     marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "center",
   },
-  signupText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  googleBtnDisabled: {
+    backgroundColor: "#A0C4FF",
+  },
+  icon: {
+    marginRight: 10,
+  },
+  googleText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   bottomText: { marginTop: 20, textAlign: "center", color: "#444" },
 });

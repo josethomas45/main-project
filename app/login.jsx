@@ -1,75 +1,52 @@
-import { Link, useRouter } from "expo-router";
+import { useSignIn } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
+import { Link } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "../lib/supabase";
 
 export default function Login() {
-  const router = useRouter();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { signIn, isLoaded } = useSignIn();
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      return Alert.alert("Error", "Please fill in all fields.");
-    }
+  const handleGoogleSignIn = async () => {
+    if (!isLoaded) return;
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      Alert.alert("Login Failed", error.message);
-      return;
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: window.location.origin,
+      });
+      // Navigation will be handled automatically by _layout.jsx
+      console.log("✅ Google sign-in initiated!");
+    } catch (err) {
+      console.error("Google sign-in error:", err);
+      Alert.alert("Sign In Failed", err.errors?.[0]?.message || "An error occurred");
+    } finally {
+      setLoading(false);
     }
-
-    // ✅ SUCCESS → Go to Chat
-    router.replace("/chat");
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Vasu The Mech</Text>
-      <Text style={styles.subtitle}>Login to continue</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#aaa"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#aaa"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      <Text style={styles.subtitle}>Sign in to continue</Text>
 
       <TouchableOpacity
-        style={styles.loginBtn}
-        onPress={handleLogin}
+        style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+        onPress={handleGoogleSignIn}
         disabled={loading}
       >
-        <Text style={styles.loginText}>
-          {loading ? "Logging in..." : "Login"}
+        <Ionicons name="logo-google" size={20} color="#fff" style={styles.icon} />
+        <Text style={styles.googleText}>
+          {loading ? "Signing in..." : "Continue with Google"}
         </Text>
       </TouchableOpacity>
 
@@ -84,25 +61,29 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 25, justifyContent: "center" },
+  container: {
+    flex: 1,
+    padding: 25,
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
   title: { fontSize: 32, fontWeight: "bold" },
   subtitle: { fontSize: 16, marginBottom: 35, color: "#666" },
-  input: {
-    width: "100%",
-    padding: 15,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  loginBtn: {
-    backgroundColor: "#007bff",
+  googleBtn: {
+    backgroundColor: "#4285F4",
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
     marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "center",
   },
-  loginText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  googleBtnDisabled: {
+    backgroundColor: "#A0C4FF",
+  },
+  icon: {
+    marginRight: 10,
+  },
+  googleText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   bottomText: { marginTop: 20, textAlign: "center", color: "#444" },
 });

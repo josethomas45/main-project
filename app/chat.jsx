@@ -1,31 +1,23 @@
+import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { supabase } from "../lib/supabase";
 
 export default function Chat() {
-  const router = useRouter();
+  const { signOut } = useAuth();
+  const { user } = useUser();
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
-    { id: "1", text: "Hi 👋 How can I help you today?", sender: "ai" },
+    { id: "1", text: `Hi ${user?.firstName || 'there'} 👋 How can I help you today?`, sender: "ai" },
   ]);
-
-  // ✅ Protect chat route
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        router.replace("/login");
-      }
-    });
-  }, []);
 
   const sendMessage = () => {
     if (!message.trim()) return;
@@ -37,6 +29,7 @@ export default function Chat() {
 
     setMessage("");
 
+    // Simulate AI response
     setTimeout(() => {
       setMessages((prev) => [
         ...prev,
@@ -49,11 +42,22 @@ export default function Chat() {
     }, 800);
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    // _layout.jsx will automatically redirect to login
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Vasu The Mech</Text>
+        <View>
+          <Text style={styles.headerTitle}>Vasu The Mech</Text>
+          <Text style={styles.headerSubtitle}>{user?.primaryEmailAddress?.emailAddress}</Text>
+        </View>
+        <TouchableOpacity onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={24} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -89,8 +93,15 @@ export default function Chat() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0f1419" },
-  header: { padding: 20, backgroundColor: "#1a1f2e" },
+  header: {
+    padding: 20,
+    backgroundColor: "#1a1f2e",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  headerSubtitle: { color: "#999", fontSize: 12, marginTop: 2 },
   bubble: {
     margin: 10,
     padding: 12,
@@ -105,6 +116,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderTopWidth: 1,
     borderColor: "#333",
+    alignItems: "center",
   },
   input: { flex: 1, color: "#fff", marginRight: 10 },
 });
