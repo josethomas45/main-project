@@ -1,10 +1,13 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,20 +15,26 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
+// import * as ImagePicker from 'expo-image-picker';
+// import * as DocumentPicker from 'expo-document-picker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
 
+// Environment configuration - replace with your actual backend URL
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://finalproject-production-fcdc.up.railway.app/docs/vehicle/chat";
+
 export default function Chat() {
-  const { signOut } = useAuth();
+  const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const router = useRouter();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
-      id: "1",
+      id: `welcome-${Date.now()}`,
       text: `Hi ${user?.firstName || "there"} 👋 How can I help you today?`,
       sender: "ai",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -35,8 +44,45 @@ export default function Chat() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [sidebarAnimation] = useState(new Animated.Value(-SIDEBAR_WIDTH));
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
-  const toggleSidebar = () => {
+  const flatListRef = useRef(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const messageIdCounter = useRef(0);
+
+  // Generate unique message ID
+  const generateMessageId = useCallback(() => {
+    messageIdCounter.current += 1;
+    return `msg-${Date.now()}-${messageIdCounter.current}`;
+  }, []);
+
+  useEffect(() => {
+    const onShow = () => {
+      setKeyboardVisible(true);
+      // Increased delay for more reliable scrolling
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    };
+    const onHide = () => setKeyboardVisible(false);
+
+    const showSub = Keyboard.addListener("keyboardDidShow", onShow);
+    const hideSub = Keyboard.addListener("keyboardDidHide", onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Scroll to end when messages change
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [messages]);
+
+  const toggleSidebar = useCallback(() => {
     const toValue = sidebarVisible ? -SIDEBAR_WIDTH : 0;
     
     Animated.timing(sidebarAnimation, {
@@ -46,41 +92,225 @@ export default function Chat() {
     }).start();
     
     setSidebarVisible(!sidebarVisible);
+  }, [sidebarVisible, sidebarAnimation]);
+
+  // Format AI response with better structure
+  const formatAIResponse = useCallback((data) => {
+    if (!data) return "Unable to process response.";
+    
+    // If the backend returns a formatted response
+    if (data.response) {
+      return data.response;
+    }
+    
+    // If the backend returns structured diagnosis data
+    if (data.diagnosis) {
+      let formatted = "";
+      
+      if (data.diagnosis.issue) {
+        formatted += `🔍 Issue: ${data.diagnosis.issue}\n\n`;
+      }
+      
+      if (data.diagnosis.cause) {
+        formatted += `⚙️ Possible Cause: ${data.diagnosis.cause}\n\n`;
+      }
+      
+      if (data.diagnosis.solution) {
+        formatted += `✅ Solution: ${data.diagnosis.solution}\n\n`;
+      }
+      
+      if (data.diagnosis.severity) {
+        formatted += `⚠️ Severity: ${data.diagnosis.severity}`;
+      }
+      
+      return formatted || "Diagnosis completed.";
+    }
+    
+    // Fallback to any text content
+    if (data.message || data.text) {
+      return data.message || data.text;
+    }
+    
+    return "Response received successfully.";
+  }, []);
+
+  const callBackend = async (userMessage) => {
+    try {
+      const token = await getToken();
+
+      if (!token) {
+        throw new Error("Authentication token not available");
+      }
+
+      const response = await fetch(`${BACKEND_URL}/vehicle/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: userMessage,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Backend error response:", errorText);
+        
+        if (response.status === 401) {
+          throw new Error("Authentication failed. Please log in again.");
+        } else if (response.status === 500) {
+          throw new Error("Server error. Please try again later.");
+        } else {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Backend error:", error);
+      throw error; // Re-throw to handle in sendMessage
+    }
   };
 
-  const sendMessage = () => {
-    if (!message.trim()) return;
+  const sendMessage = async () => {
+    if (!message.trim() || isSending) return;
 
-    const newMessage = {
-      id: Date.now().toString(),
-      text: message,
+    const userText = message.trim();
+    setIsSending(true);
+
+    const userMessage = {
+      id: generateMessageId(),
+      text: userText,
       sender: "user",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    // Add user message immediately
+    setMessages((prev) => [...prev, userMessage]);
     setMessage("");
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = {
-        id: Math.random().toString(),
-        text: "This is an AI response 🤖",
+    try {
+      const data = await callBackend(userText);
+
+      if (!data) {
+        throw new Error("No response from server");
+      }
+
+      const aiMessage = {
+        id: data.chat_id || generateMessageId(),
         sender: "ai",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: data.timestamp || new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        text: formatAIResponse(data),
       };
-      setMessages((prev) => [...prev, aiResponse]);
-    }, 800);
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error("Send message error:", error);
+      
+      const errorMessage = {
+        id: generateMessageId(),
+        sender: "ai",
+        text: `⚠️ ${error.message || "Unable to diagnose the issue. Please try again."}`,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleLogout = async () => {
-    await signOut();
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Logout", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              console.error("Logout error:", error);
+              Alert.alert("Error", "Failed to logout. Please try again.");
+            }
+          }
+        }
+      ]
+    );
   };
 
-  const handleMenuPress = (option) => {
+  const handleMenuPress = useCallback((option) => {
     console.log(`Selected: ${option}`);
     toggleSidebar();
-    // Handle navigation or actions here
+    
+    if (option === "Maintenance Reminder") {
+      router.push("/maintenance-reminder");
+    } else {
+      Alert.alert("Coming Soon", `${option} feature will be available soon!`);
+    }
+  }, [toggleSidebar, router]);
+
+  // Handle photo selection
+  const handlePhotoSelect = async () => {
+    setShowAttachmentModal(false);
+    
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert("Permission Required", "Permission to access photos is required!");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        // TODO: Implement image upload to backend
+        console.log("Selected image:", result.assets[0].uri);
+        Alert.alert("Success", "Image selected. Upload functionality coming soon!");
+      }
+    } catch (error) {
+      console.error("Photo selection error:", error);
+      Alert.alert("Error", "Failed to select photo");
+    }
+  };
+
+  // Handle document selection
+  const handleDocumentSelect = async () => {
+    setShowAttachmentModal(false);
+    
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+      });
+
+      if (result.assets && result.assets[0]) {
+        // TODO: Implement document upload to backend
+        console.log("Selected document:", result.assets[0].uri);
+        Alert.alert("Success", "Document selected. Upload functionality coming soon!");
+      }
+    } catch (error) {
+      console.error("Document selection error:", error);
+      Alert.alert("Error", "Failed to select document");
+    }
   };
 
   const renderMessage = ({ item }) => (
@@ -119,7 +349,7 @@ export default function Chat() {
       {item.sender === "user" && (
         <View style={styles.userAvatar}>
           <Text style={styles.userAvatarText}>
-            {user?.firstName?.charAt(0) || "U"}
+            {user?.firstName?.charAt(0)?.toUpperCase() || "U"}
           </Text>
         </View>
       )}
@@ -129,8 +359,8 @@ export default function Chat() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -193,12 +423,12 @@ export default function Chat() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => handleMenuPress("Cost Tracking")}
+            onPress={() => handleMenuPress("Chat Summary")}
           >
             <View style={styles.menuIconContainer}>
               <Ionicons name="cash-outline" size={24} color="#27374D" />
             </View>
-            <Text style={styles.menuItemText}>Cost Tracking</Text>
+            <Text style={styles.menuItemText}>Chat Summary</Text>
           </TouchableOpacity>
         </View>
 
@@ -207,14 +437,14 @@ export default function Chat() {
           <View style={styles.userInfo}>
             <View style={styles.userInfoAvatar}>
               <Text style={styles.userInfoAvatarText}>
-                {user?.firstName?.charAt(0) || "U"}
+                {user?.firstName?.charAt(0)?.toUpperCase() || "U"}
               </Text>
             </View>
             <View style={styles.userInfoText}>
               <Text style={styles.userInfoName}>
                 {user?.firstName || "User"} {user?.lastName || ""}
               </Text>
-              <Text style={styles.userInfoEmail}>
+              <Text style={styles.userInfoEmail} numberOfLines={1}>
                 {user?.primaryEmailAddress?.emailAddress || ""}
               </Text>
             </View>
@@ -233,11 +463,15 @@ export default function Chat() {
 
       {/* Messages */}
       <FlatList
+        ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }}
       />
 
       {/* Input Bar */}
@@ -246,8 +480,9 @@ export default function Chat() {
           <TouchableOpacity
             onPress={() => setShowAttachmentModal(true)}
             style={styles.plusBtn}
+            disabled={isSending}
           >
-            <Ionicons name="add" size={24} color="#27374D" />
+            <Ionicons name="add" size={24} color={isSending ? "#9DB2BF" : "#27374D"} />
           </TouchableOpacity>
           <TextInput
             style={styles.input}
@@ -257,19 +492,20 @@ export default function Chat() {
             placeholderTextColor="#9DB2BF"
             multiline
             maxLength={500}
+            editable={!isSending}
           />
           <TouchableOpacity
             onPress={sendMessage}
             style={[
               styles.sendBtn,
-              !message.trim() && styles.sendBtnDisabled,
+              (!message.trim() || isSending) && styles.sendBtnDisabled,
             ]}
-            disabled={!message.trim()}
+            disabled={!message.trim() || isSending}
           >
             <Ionicons
-              name="send"
+              name={isSending ? "hourglass-outline" : "send"}
               size={20}
-              color={message.trim() ? "#FFFFFF" : "#9DB2BF"}
+              color={(message.trim() && !isSending) ? "#FFFFFF" : "#9DB2BF"}
             />
           </TouchableOpacity>
         </View>
@@ -290,20 +526,14 @@ export default function Chat() {
           <View style={styles.modalContent}>
             <TouchableOpacity
               style={styles.attachmentOption}
-              onPress={() => {
-                console.log("Photo selected");
-                setShowAttachmentModal(false);
-              }}
+              onPress={handlePhotoSelect}
             >
               <Ionicons name="camera" size={24} color="#27374D" />
               <Text style={styles.attachmentText}>Photo</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.attachmentOption}
-              onPress={() => {
-                console.log("Document selected");
-                setShowAttachmentModal(false);
-              }}
+              onPress={handleDocumentSelect}
             >
               <Ionicons name="document" size={24} color="#27374D" />
               <Text style={styles.attachmentText}>Document</Text>
