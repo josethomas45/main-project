@@ -24,7 +24,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
 
 // Environment configuration - replace with your actual backend URL
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://finalproject-production-fcdc.up.railway.app/docs/vehicle/chat";
+const BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  "https://finalproject-production-fcdc.up.railway.app";
+
 
 export default function Chat() {
   const { signOut, getToken } = useAuth();
