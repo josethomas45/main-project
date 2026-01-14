@@ -1,6 +1,10 @@
+const BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  "https://finalproject-production-fcdc.up.railway.app";
+
 export async function fetchWorkshops({ latitude, longitude, token }) {
   const res = await fetch(
-    `${process.env.EXPO_PUBLIC_BACKEND_URL}/vehicle/workshops?latitude=${latitude}&longitude=${longitude}`,
+    `${BACKEND_URL}/vehicle/workshops?latitude=${latitude}&longitude=${longitude}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -12,5 +16,5 @@ export async function fetchWorkshops({ latitude, longitude, token }) {
     throw new Error("Failed to fetch workshops");
   }
 
-  return res.json(); // list
+  return res.json();
 }

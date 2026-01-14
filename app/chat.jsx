@@ -1,6 +1,5 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -22,39 +21,32 @@ import { fetchWorkshops } from "../utils/workshops";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
 
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_BACKEND_URL ||
-  "https://finalproject-production-fcdc.up.railway.app";
-
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
-  const router = useRouter();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
       id: `welcome-${Date.now()}`,
-      text: `Hi ${user?.firstName || "there"} 👋 How can I help you today?`,
       sender: "ai",
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      text: `Hi ${user?.firstName || "there"} 👋 How can I help you today?`,
+      timestamp: timeNow(),
     },
   ]);
 
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [sidebarAnimation] = useState(new Animated.Value(-SIDEBAR_WIDTH));
   const [isSending, setIsSending] = useState(false);
-
   const flatListRef = useRef(null);
-  const messageIdCounter = useRef(0);
+  const msgCounter = useRef(0);
 
-  const generateMessageId = () => {
-    messageIdCounter.current += 1;
-    return `msg-${Date.now()}-${messageIdCounter.current}`;
-  };
+  function timeNow() {
+    return new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
 
   useEffect(() => {
     setTimeout(() => {
@@ -62,23 +54,15 @@ export default function Chat() {
     }, 100);
   }, [messages]);
 
-  // ---------- FORMATTERS ----------
-
-  const formatAIResponse = (data) => {
+  // =========================
+  // FORMAT AGENT MESSAGE
+  // =========================
+  const formatAgentText = (data) => {
     let text = "";
 
-    if (data.diagnosis) {
-      text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
-    }
-
-    if (data.explanation) {
-      text += `🧠 Explanation:\n${data.explanation}\n\n`;
-    }
-
-    if (data.action) {
-      text += `⚠️ Action: ${data.action}\n`;
-    }
-
+    if (data.diagnosis) text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
+    if (data.explanation) text += `🧠 Explanation:\n${data.explanation}\n\n`;
+    if (data.action) text += `⚠️ Action: ${data.action}\n`;
     if (typeof data.severity === "number") {
       text += `🔥 Severity: ${Math.round(data.severity * 100)}%\n`;
     }
@@ -86,124 +70,113 @@ export default function Chat() {
     return text.trim();
   };
 
-  const formatWorkshopResults = (workshops) => {
-    if (!workshops || workshops.length === 0) {
-      return "❌ No nearby workshops found.";
+  // =========================
+  // FORMAT WORKSHOP AS AGENT REPLY
+  // =========================
+  const formatWorkshopAgentReply = (response) => {
+    const urls = Array.isArray(response?.maps_urls)
+      ? response.maps_urls
+      : [];
+
+    if (urls.length === 0) {
+      return {
+        id: genId(),
+        sender: "ai",
+        text: "❌ I couldn’t find any nearby workshops.",
+        timestamp: timeNow(),
+      };
     }
 
-    let text = "🛠️ Nearby Workshops:\n\n";
+    let text = "📍 Here are some nearby workshops I found for you:\n\n";
 
-    workshops.forEach((w, i) => {
-      text += `${i + 1}. ${w.name}\n`;
-      if (w.google_maps_url) {
-        text += `📍 ${w.google_maps_url}\n`;
-      }
-      text += "\n";
+    urls.forEach((url, i) => {
+      text += `${i + 1}. ${url}\n\n`;
     });
 
-    return text.trim();
+    return {
+      id: genId(),
+      sender: "ai",
+      text: text.trim(),
+      timestamp: timeNow(),
+    };
   };
 
-  // ---------- API ----------
-
-  const callBackend = async (userMessage) => {
-    const token = await getToken();
-    if (!token) throw new Error("Authentication token missing");
-
-    const res = await fetch(`${BACKEND_URL}/vehicle/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ message: userMessage }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Server error (${res.status})`);
-    }
-
-    return res.json();
-  };
-
-  // ---------- SEND MESSAGE ----------
-
+  // =========================
+  // SEND MESSAGE
+  // =========================
   const sendMessage = async () => {
     if (!message.trim() || isSending) return;
 
     const userText = message.trim();
     setIsSending(true);
+    setMessage("");
 
     setMessages((prev) => [
       ...prev,
       {
-        id: generateMessageId(),
-        text: userText,
+        id: genId(),
         sender: "user",
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        text: userText,
+        timestamp: timeNow(),
       },
     ]);
 
-    setMessage("");
-
     try {
-      const data = await callBackend(userText);
+      // 🔍 REGEX-BASED WORKSHOP DETECTION (KEPT)
+      const wantsWorkshop =
+        /workshop|garage|mechanic|service center/i.test(userText);
 
-      // Show agent response
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: data.chat_id || generateMessageId(),
-          sender: "ai",
-          text: formatAIResponse(data),
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-
-      // 🔥 WORKSHOP TRIGGER
-      if (
-        data.action === "CONFIRM_WORKSHOP" ||
-        /workshop|garage|mechanic/i.test(userText)
-      ) {
+      if (wantsWorkshop) {
         const token = await getToken();
         const location = await getDeviceLocation();
 
-        const workshops = await fetchWorkshops({
+        const workshopResponse = await fetchWorkshops({
           latitude: location.latitude,
           longitude: location.longitude,
           token,
         });
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: generateMessageId(),
-            sender: "ai",
-            text: formatWorkshopResults(workshops),
-            timestamp: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          },
-        ]);
+        const agentReply = formatWorkshopAgentReply(workshopResponse);
+
+        setMessages((prev) => [...prev, agentReply]);
+        return;
       }
+
+      // 🤖 NORMAL AGENT FLOW
+      const token = await getToken();
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_BACKEND_URL}/vehicle/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ message: userText }),
+        }
+      );
+
+      if (!res.ok) throw new Error("Agent failed");
+
+      const data = await res.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: data.chat_id || genId(),
+          sender: "ai",
+          text: formatAgentText(data),
+          timestamp: timeNow(),
+        },
+      ]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
-          id: generateMessageId(),
+          id: genId(),
           sender: "ai",
-          text: `⚠️ ${err.message || "Something went wrong"}`,
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+          text: "⚠️ Something went wrong. Please try again.",
+          timestamp: timeNow(),
         },
       ]);
     } finally {
@@ -211,8 +184,9 @@ export default function Chat() {
     }
   };
 
-  // ---------- RENDER ----------
-
+  // =========================
+  // RENDER MESSAGE
+  // =========================
   const renderMessage = ({ item }) => (
     <View
       style={[
@@ -231,10 +205,9 @@ export default function Chat() {
             styles.messageText,
             item.sender === "user" ? styles.userText : styles.aiText,
           ]}
-          selectable
-          onPress={() => {
-            const match = item.text.match(/https?:\/\/[^\s]+/);
-            if (match) Linking.openURL(match[0]);
+          onPress={(e) => {
+            const urlMatch = item.text.match(/https?:\/\/\S+/);
+            if (urlMatch) Linking.openURL(urlMatch[0]);
           }}
         >
           {item.text}
@@ -250,9 +223,6 @@ export default function Chat() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="menu" size={28} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Vasu The Mech</Text>
         <TouchableOpacity onPress={signOut}>
           <Ionicons name="log-out-outline" size={24} color="#fff" />
@@ -287,8 +257,9 @@ export default function Chat() {
   );
 }
 
-// ---------- STYLES ----------
-
+// =========================
+// STYLES
+// =========================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {
@@ -301,11 +272,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
   messagesList: { padding: 16 },
   messageContainer: { marginBottom: 12 },
-  bubble: {
-    padding: 14,
-    borderRadius: 16,
-    maxWidth: "80%",
-  },
+  bubble: { padding: 14, borderRadius: 16, maxWidth: "80%" },
   userBubble: { backgroundColor: "#27374D", alignSelf: "flex-end" },
   aiBubble: { backgroundColor: "#9DB2BF", alignSelf: "flex-start" },
   messageText: { fontSize: 15 },
