@@ -1,22 +1,23 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   FlatList,
-  Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Linking,
 } from "react-native";
+
+import { getDeviceLocation } from "../utils/location";
+import { fetchWorkshops } from "../utils/workshops";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
@@ -61,45 +62,49 @@ export default function Chat() {
     }, 100);
   }, [messages]);
 
-  const toggleSidebar = () => {
-    Animated.timing(sidebarAnimation, {
-      toValue: sidebarVisible ? -SIDEBAR_WIDTH : 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-    setSidebarVisible(!sidebarVisible);
+  // ---------- FORMATTERS ----------
+
+  const formatAIResponse = (data) => {
+    let text = "";
+
+    if (data.diagnosis) {
+      text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
+    }
+
+    if (data.explanation) {
+      text += `🧠 Explanation:\n${data.explanation}\n\n`;
+    }
+
+    if (data.action) {
+      text += `⚠️ Action: ${data.action}\n`;
+    }
+
+    if (typeof data.severity === "number") {
+      text += `🔥 Severity: ${Math.round(data.severity * 100)}%\n`;
+    }
+
+    return text.trim();
   };
 
-  // 🔧 FIXED: matches backend AgentResponse exactly
-  const formatAIResponse = (data) => {
-  let text = "";
+  const formatWorkshopResults = (workshops) => {
+    if (!workshops || workshops.length === 0) {
+      return "❌ No nearby workshops found.";
+    }
 
-  if (data.diagnosis) {
-    text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
-  }
+    let text = "🛠️ Nearby Workshops:\n\n";
 
-  if (data.explanation) {
-    text += `🧠 Explanation:\n${data.explanation}\n\n`;
-  }
-
-  if (data.action) {
-    text += `⚠️ Action: ${data.action}\n`;
-  }
-
-  if (typeof data.severity === "number") {
-    text += `🔥 Severity: ${Math.round(data.severity * 100)}%\n\n`;
-  }
-
-  // ✅ SHOW FOLLOW-UP QUESTIONS
-  if (Array.isArray(data.follow_up_questions) && data.follow_up_questions.length > 0) {
-    text += "❓ Follow-up questions:\n";
-    data.follow_up_questions.forEach((q, i) => {
-      text += `${i + 1}. ${q}\n`;
+    workshops.forEach((w, i) => {
+      text += `${i + 1}. ${w.name}\n`;
+      if (w.google_maps_url) {
+        text += `📍 ${w.google_maps_url}\n`;
+      }
+      text += "\n";
     });
-  }
 
-  return text.trim();
-};
+    return text.trim();
+  };
+
+  // ---------- API ----------
 
   const callBackend = async (userMessage) => {
     const token = await getToken();
@@ -120,6 +125,8 @@ export default function Chat() {
 
     return res.json();
   };
+
+  // ---------- SEND MESSAGE ----------
 
   const sendMessage = async () => {
     if (!message.trim() || isSending) return;
@@ -145,6 +152,7 @@ export default function Chat() {
     try {
       const data = await callBackend(userText);
 
+      // Show agent response
       setMessages((prev) => [
         ...prev,
         {
@@ -157,6 +165,34 @@ export default function Chat() {
           }),
         },
       ]);
+
+      // 🔥 WORKSHOP TRIGGER
+      if (
+        data.action === "CONFIRM_WORKSHOP" ||
+        /workshop|garage|mechanic/i.test(userText)
+      ) {
+        const token = await getToken();
+        const location = await getDeviceLocation();
+
+        const workshops = await fetchWorkshops({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          token,
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateMessageId(),
+            sender: "ai",
+            text: formatWorkshopResults(workshops),
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -174,6 +210,8 @@ export default function Chat() {
       setIsSending(false);
     }
   };
+
+  // ---------- RENDER ----------
 
   const renderMessage = ({ item }) => (
     <View
@@ -193,6 +231,11 @@ export default function Chat() {
             styles.messageText,
             item.sender === "user" ? styles.userText : styles.aiText,
           ]}
+          selectable
+          onPress={() => {
+            const match = item.text.match(/https?:\/\/[^\s]+/);
+            if (match) Linking.openURL(match[0]);
+          }}
         >
           {item.text}
         </Text>
@@ -207,7 +250,7 @@ export default function Chat() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={toggleSidebar}>
+        <TouchableOpacity>
           <Ionicons name="menu" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Vasu The Mech</Text>
@@ -243,6 +286,8 @@ export default function Chat() {
     </KeyboardAvoidingView>
   );
 }
+
+// ---------- STYLES ----------
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
