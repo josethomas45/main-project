@@ -10,6 +10,7 @@ import {
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -19,32 +20,20 @@ export default function Schedule() {
   const { user } = useUser();
   const router = useRouter();
   const [showProfileModal, setShowProfileModal] = useState(false);
-
-  const handleLogout = async () => {
-    setShowProfileModal(false);
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Logout", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              console.error("Logout error:", error);
-              Alert.alert("Error", "Failed to logout. Please try again.");
-            }
-          }
-        }
-      ]
-    );
-  };
+  const [showAddModal, setShowAddModal] = useState(false);
+  
+  // Form state
+  const [newSchedule, setNewSchedule] = useState({
+    title: "",
+    description: "",
+    date: "",
+    time: "",
+    location: "",
+    type: "maintenance",
+  });
 
   // Sample schedule data - Replace with actual data from backend
-  const schedules = [
+  const [schedules, setSchedules] = useState([
     {
       id: 1,
       title: "Service Appointment",
@@ -81,7 +70,86 @@ export default function Schedule() {
       location: "Brake Specialists",
       type: "inspection",
     },
-  ];
+  ]);
+
+  const handleLogout = async () => {
+    setShowProfileModal(false);
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Logout", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              console.error("Logout error:", error);
+              Alert.alert("Error", "Failed to logout. Please try again.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleAddSchedule = () => {
+    // Validate form
+    if (!newSchedule.title.trim()) {
+      Alert.alert("Error", "Please enter a title");
+      return;
+    }
+    if (!newSchedule.date.trim()) {
+      Alert.alert("Error", "Please enter a date");
+      return;
+    }
+    if (!newSchedule.time.trim()) {
+      Alert.alert("Error", "Please enter a time");
+      return;
+    }
+
+    // Add new schedule
+    const newId = Math.max(...schedules.map(s => s.id)) + 1;
+    const scheduleToAdd = {
+      id: newId,
+      ...newSchedule,
+    };
+
+    setSchedules([...schedules, scheduleToAdd]);
+    
+    // Reset form
+    setNewSchedule({
+      title: "",
+      description: "",
+      date: "",
+      time: "",
+      location: "",
+      type: "maintenance",
+    });
+    
+    setShowAddModal(false);
+    Alert.alert("Success", "Schedule added successfully!");
+  };
+
+  const handleDeleteSchedule = (scheduleId, scheduleTitle) => {
+    Alert.alert(
+      "Delete Schedule",
+      `Are you sure you want to delete "${scheduleTitle}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setSchedules(schedules.filter(s => s.id !== scheduleId));
+            Alert.alert("Success", "Schedule deleted successfully!");
+          }
+        }
+      ]
+    );
+  };
 
   const getTypeColor = (type) => {
     switch (type) {
@@ -162,71 +230,87 @@ export default function Schedule() {
           <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
 
           {schedules.map((schedule) => (
-            <TouchableOpacity
+            <View
               key={schedule.id}
               style={styles.scheduleCard}
-              activeOpacity={0.7}
             >
-              <View
-                style={[
-                  styles.scheduleTypeIndicator,
-                  { backgroundColor: getTypeColor(schedule.type) },
-                ]}
-              />
+              <TouchableOpacity
+                style={styles.scheduleCardContent}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.scheduleTypeIndicator,
+                    { backgroundColor: getTypeColor(schedule.type) },
+                  ]}
+                />
 
-              <View style={styles.scheduleContent}>
-                <View style={styles.scheduleHeader}>
-                  <View
-                    style={[
-                      styles.scheduleIconContainer,
-                      { backgroundColor: getTypeColor(schedule.type) + "20" },
-                    ]}
-                  >
-                    <Ionicons
-                      name={getTypeIcon(schedule.type)}
-                      size={20}
-                      color={getTypeColor(schedule.type)}
-                    />
+                <View style={styles.scheduleContent}>
+                  <View style={styles.scheduleHeader}>
+                    <View
+                      style={[
+                        styles.scheduleIconContainer,
+                        { backgroundColor: getTypeColor(schedule.type) + "20" },
+                      ]}
+                    >
+                      <Ionicons
+                        name={getTypeIcon(schedule.type)}
+                        size={20}
+                        color={getTypeColor(schedule.type)}
+                      />
+                    </View>
+                    <View style={styles.scheduleTitleContainer}>
+                      <Text style={styles.scheduleTitle}>{schedule.title}</Text>
+                      <Text style={styles.scheduleDescription}>
+                        {schedule.description}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.scheduleTitleContainer}>
-                    <Text style={styles.scheduleTitle}>{schedule.title}</Text>
-                    <Text style={styles.scheduleDescription}>
-                      {schedule.description}
-                    </Text>
+
+                  <View style={styles.scheduleDetails}>
+                    <View style={styles.scheduleDetailItem}>
+                      <Ionicons name="calendar" size={16} color="#526D82" />
+                      <Text style={styles.scheduleDetailText}>
+                        {schedule.date}
+                      </Text>
+                    </View>
+
+                    <View style={styles.scheduleDetailItem}>
+                      <Ionicons name="time" size={16} color="#526D82" />
+                      <Text style={styles.scheduleDetailText}>
+                        {schedule.time}
+                      </Text>
+                    </View>
+
+                    <View style={styles.scheduleDetailItem}>
+                      <Ionicons name="location" size={16} color="#526D82" />
+                      <Text style={styles.scheduleDetailText}>
+                        {schedule.location}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
-                <View style={styles.scheduleDetails}>
-                  <View style={styles.scheduleDetailItem}>
-                    <Ionicons name="calendar" size={16} color="#526D82" />
-                    <Text style={styles.scheduleDetailText}>
-                      {schedule.date}
-                    </Text>
-                  </View>
+                <Ionicons name="chevron-forward" size={20} color="#9DB2BF" />
+              </TouchableOpacity>
 
-                  <View style={styles.scheduleDetailItem}>
-                    <Ionicons name="time" size={16} color="#526D82" />
-                    <Text style={styles.scheduleDetailText}>
-                      {schedule.time}
-                    </Text>
-                  </View>
-
-                  <View style={styles.scheduleDetailItem}>
-                    <Ionicons name="location" size={16} color="#526D82" />
-                    <Text style={styles.scheduleDetailText}>
-                      {schedule.location}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <Ionicons name="chevron-forward" size={20} color="#9DB2BF" />
-            </TouchableOpacity>
+              {/* Delete Button */}
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteSchedule(schedule.id, schedule.title)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
 
         {/* Add Button */}
-        <TouchableOpacity style={styles.addButton}>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowAddModal(true)}
+        >
           <Ionicons name="add-circle" size={24} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add New Schedule</Text>
         </TouchableOpacity>
@@ -296,6 +380,175 @@ export default function Schedule() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Add Schedule Modal */}
+      <Modal
+        visible={showAddModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View style={styles.addModalOverlay}>
+          <View style={styles.addModalContent}>
+            <View style={styles.addModalHeader}>
+              <Text style={styles.addModalTitle}>Add New Schedule</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Ionicons name="close" size={28} color="#27374D" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Title Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Oil Change"
+                  placeholderTextColor="#9DB2BF"
+                  value={newSchedule.title}
+                  onChangeText={(text) => setNewSchedule({...newSchedule, title: text})}
+                />
+              </View>
+
+              {/* Description Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Add details..."
+                  placeholderTextColor="#9DB2BF"
+                  value={newSchedule.description}
+                  onChangeText={(text) => setNewSchedule({...newSchedule, description: text})}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Date Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Date *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Jan 25, 2026"
+                  placeholderTextColor="#9DB2BF"
+                  value={newSchedule.date}
+                  onChangeText={(text) => setNewSchedule({...newSchedule, date: text})}
+                />
+              </View>
+
+              {/* Time Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Time *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 10:00 AM"
+                  placeholderTextColor="#9DB2BF"
+                  value={newSchedule.time}
+                  onChangeText={(text) => setNewSchedule({...newSchedule, time: text})}
+                />
+              </View>
+
+              {/* Location Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Location</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., AutoCare Center"
+                  placeholderTextColor="#9DB2BF"
+                  value={newSchedule.location}
+                  onChangeText={(text) => setNewSchedule({...newSchedule, location: text})}
+                />
+              </View>
+
+              {/* Type Selection */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Type</Text>
+                <View style={styles.typeSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      newSchedule.type === "service" && styles.typeButtonActive,
+                      { borderColor: "#FF6B6B" }
+                    ]}
+                    onPress={() => setNewSchedule({...newSchedule, type: "service"})}
+                  >
+                    <Ionicons 
+                      name="construct" 
+                      size={20} 
+                      color={newSchedule.type === "service" ? "#FF6B6B" : "#9DB2BF"} 
+                    />
+                    <Text style={[
+                      styles.typeButtonText,
+                      newSchedule.type === "service" && { color: "#FF6B6B" }
+                    ]}>
+                      Service
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      newSchedule.type === "maintenance" && styles.typeButtonActive,
+                      { borderColor: "#FFA500" }
+                    ]}
+                    onPress={() => setNewSchedule({...newSchedule, type: "maintenance"})}
+                  >
+                    <Ionicons 
+                      name="settings" 
+                      size={20} 
+                      color={newSchedule.type === "maintenance" ? "#FFA500" : "#9DB2BF"} 
+                    />
+                    <Text style={[
+                      styles.typeButtonText,
+                      newSchedule.type === "maintenance" && { color: "#FFA500" }
+                    ]}>
+                      Maintenance
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      newSchedule.type === "inspection" && styles.typeButtonActive,
+                      { borderColor: "#4ECDC4" }
+                    ]}
+                    onPress={() => setNewSchedule({...newSchedule, type: "inspection"})}
+                  >
+                    <Ionicons 
+                      name="search" 
+                      size={20} 
+                      color={newSchedule.type === "inspection" ? "#4ECDC4" : "#9DB2BF"} 
+                    />
+                    <Text style={[
+                      styles.typeButtonText,
+                      newSchedule.type === "inspection" && { color: "#4ECDC4" }
+                    ]}>
+                      Inspection
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowAddModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleAddSchedule}
+                >
+                  <Text style={styles.saveButtonText}>Add Schedule</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -396,15 +649,18 @@ const styles = StyleSheet.create({
   scheduleCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    padding: 16,
     marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: "relative",
+  },
+  scheduleCardContent: {
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
   },
   scheduleTypeIndicator: {
     width: 4,
@@ -457,6 +713,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#526D82",
   },
+  deleteButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#FF6B6B",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
   addButton: {
     backgroundColor: "#27374D",
     marginHorizontal: 16,
@@ -481,7 +753,7 @@ const styles = StyleSheet.create({
   },
   profileModal: {
     position: "absolute",
-    top: 90,
+    top: Platform.OS === "android" ? StatusBar.currentHeight + 70 : 110,
     right: 20,
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -522,7 +794,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   profileModalEmail: {
-    fontSize: 13,
+    fontSize: 11,
     color: "#9DB2BF",
   },
   profileModalDivider: {
@@ -546,5 +818,102 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: "#FF6B6B",
+  },
+
+  // Add Schedule Modal
+  addModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  addModalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: "90%",
+  },
+  addModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  addModalTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#27374D",
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#27374D",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: "#27374D",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  typeSelector: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  typeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+    gap: 6,
+  },
+  typeButtonActive: {
+    backgroundColor: "#F5F5F5",
+  },
+  typeButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#9DB2BF",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 24,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  cancelButton: {
+    backgroundColor: "#F5F5F5",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#526D82",
+  },
+  saveButton: {
+    backgroundColor: "#27374D",
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });
