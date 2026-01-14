@@ -6,10 +6,7 @@ export async function getDeviceLocation() {
     throw new Error("Location permission denied");
   }
 
-  const loc = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
-
+  const loc = await Location.getCurrentPositionAsync({});
   return {
     latitude: loc.coords.latitude,
     longitude: loc.coords.longitude,

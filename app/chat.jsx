@@ -1,6 +1,5 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -22,29 +21,23 @@ import { fetchWorkshops } from "../utils/workshops";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
 
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_BACKEND_URL ||
-  "https://finalproject-production-fcdc.up.railway.app";
-
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
-  const router = useRouter();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
       id: `welcome-${Date.now()}`,
       sender: "ai",
+      sender: "ai",
       text: `Hi ${user?.firstName || "there"} 👋 How can I help you today?`,
+      timestamp: timeNow(),
       timestamp: timeNow(),
     },
   ]);
 
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [sidebarAnimation] = useState(new Animated.Value(-SIDEBAR_WIDTH));
   const [isSending, setIsSending] = useState(false);
-
   const flatListRef = useRef(null);
   const msgCounter = useRef(0);
 
@@ -54,7 +47,16 @@ export default function Chat() {
       minute: "2-digit",
     });
   }
+  const msgCounter = useRef(0);
 
+  function timeNow() {
+    return new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
   const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export default function Chat() {
       };
     }
 
-    let text = "🛠️ Nearby Workshops:\n\n";
+    let text = "📍 Here are some nearby workshops I found for you:\n\n";
 
     urls.forEach((url, i) => {
       text += `${i + 1}. ${url}\n\n`;
@@ -155,13 +157,15 @@ export default function Chat() {
     return res.json();
   };
 
-  // ---------- SEND MESSAGE ----------
-
+  // =========================
+  // SEND MESSAGE
+  // =========================
   const sendMessage = async () => {
     if (!message.trim() || isSending) return;
 
     const userText = message.trim();
     setIsSending(true);
+    setMessage("");
     setMessage("");
 
     setMessages((prev) => [
@@ -169,7 +173,10 @@ export default function Chat() {
       {
         id: genId(),
         sender: "user",
+        id: genId(),
+        sender: "user",
         text: userText,
+        timestamp: timeNow(),
         timestamp: timeNow(),
       },
     ]);
@@ -197,10 +204,35 @@ export default function Chat() {
         const location = await getDeviceLocation();
 
         const workshopResponse = await fetchWorkshops({
+        const workshopResponse = await fetchWorkshops({
           latitude: location.latitude,
           longitude: location.longitude,
           token,
         });
+
+        const agentReply = formatWorkshopAgentReply(workshopResponse);
+
+        setMessages((prev) => [...prev, agentReply]);
+        return;
+      }
+
+      // 🤖 NORMAL AGENT FLOW
+      const token = await getToken();
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_BACKEND_URL}/vehicle/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ message: userText }),
+        }
+      );
+
+      if (!res.ok) throw new Error("Agent failed");
+
+      const data = await res.json();
 
         setMessages((prev) => [
           ...prev,
@@ -211,6 +243,7 @@ export default function Chat() {
       setMessages((prev) => [
         ...prev,
         {
+          id: genId(),
           id: genId(),
           sender: "ai",
           text: `⚠️ ${err.message || "Something went wrong"}`,
@@ -281,9 +314,6 @@ export default function Chat() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="menu" size={28} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Vasu The Mech</Text>
         <TouchableOpacity onPress={signOut}>
           <Ionicons name="log-out-outline" size={24} color="#fff" />
@@ -318,8 +348,9 @@ export default function Chat() {
   );
 }
 
-// ---------- STYLES ----------
-
+// =========================
+// STYLES
+// =========================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {
@@ -332,6 +363,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
   messagesList: { padding: 16 },
   messageContainer: { marginBottom: 12 },
+  bubble: { padding: 14, borderRadius: 16, maxWidth: "80%" },
   bubble: { padding: 14, borderRadius: 16, maxWidth: "80%" },
   userBubble: { backgroundColor: "#27374D", alignSelf: "flex-end" },
   aiBubble: { backgroundColor: "#9DB2BF", alignSelf: "flex-start" },
