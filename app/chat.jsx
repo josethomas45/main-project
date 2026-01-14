@@ -7,6 +7,7 @@ import {
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StatusBar,
   StyleSheet,
@@ -21,16 +22,18 @@ import { fetchWorkshops } from "../utils/workshops";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const router = useRouter();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
       id: `welcome-${Date.now()}`,
-      text: `Hi ${user?.firstName || "there"} 👋 How can I help you today?`,
+      text: `Hi ${user?.firstName || "there"}  How can I help you today?`,
       sender: "ai",
       timestamp: new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -40,8 +43,11 @@ export default function Chat() {
   ]);
 
   const [isSending, setIsSending] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  
   const flatListRef = useRef(null);
   const msgCounter = useRef(0);
+  const sidebarAnimation = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   function timeNow() {
     return new Date().toLocaleTimeString([], {
@@ -49,16 +55,7 @@ export default function Chat() {
       minute: "2-digit",
     });
   }
-  const msgCounter = useRef(0);
 
-  function timeNow() {
-    return new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
   const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
 
   useEffect(() => {
@@ -76,36 +73,91 @@ export default function Chat() {
     setSidebarVisible(!sidebarVisible);
   };
 
-  // 🔧 FIXED: matches backend AgentResponse exactly
+  const handleMenuPress = (menuItem) => {
+    console.log("Menu pressed:", menuItem);
+    toggleSidebar();
+    
+    // Navigate to respective screens
+    switch (menuItem) {
+      case "Maintenance Reminder":
+        router.push("/maintenance-reminder");
+        break;
+      case "Schedule":
+        router.push("/schedule");
+        break;
+      case "Cost Tracking":
+        router.push("/cost-tracking");
+        break;
+      default:
+        console.log("Unknown menu item:", menuItem);
+    }
+  };
+
+  // Format AI response
   const formatAIResponse = (data) => {
     let text = "";
 
-  if (data.diagnosis) {
-    text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
-  }
+    if (data.diagnosis) {
+      text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
+    }
 
-  if (data.explanation) {
-    text += `🧠 Explanation:\n${data.explanation}\n\n`;
-  }
+    if (data.explanation) {
+      text += `🧠 Explanation:\n${data.explanation}\n\n`;
+    }
 
     if (data.action) {
       text += `⚠️ Action: ${data.action}\n`;
     }
 
-  if (typeof data.severity === "number") {
-    text += `🔥 Severity: ${Math.round(data.severity * 100)}%\n\n`;
-  }
+    if (typeof data.severity === "number") {
+      text += `🔥 Severity: ${Math.round(data.severity * 100)}%\n\n`;
+    }
 
-  // ✅ SHOW FOLLOW-UP QUESTIONS
-  if (Array.isArray(data.follow_up_questions) && data.follow_up_questions.length > 0) {
-    text += "❓ Follow-up questions:\n";
-    data.follow_up_questions.forEach((q, i) => {
-      text += `${i + 1}. ${q}\n`;
+    // Show follow-up questions
+    if (Array.isArray(data.follow_up_questions) && data.follow_up_questions.length > 0) {
+      text += "❓ Follow-up questions:\n";
+      data.follow_up_questions.forEach((q, i) => {
+        text += `${i + 1}. ${q}\n`;
+      });
+    }
+
+    return text.trim();
+  };
+
+  // Format workshop response
+  const formatWorkshopAgentReply = (workshopData) => {
+    if (!workshopData || !workshopData.workshops || workshopData.workshops.length === 0) {
+      return {
+        id: genId(),
+        sender: "ai",
+        text: "⚠️ No workshops found nearby. Please try a different location.",
+        timestamp: timeNow(),
+      };
+    }
+
+    let text = "🔧 Here are nearby workshops:\n\n";
+    workshopData.workshops.forEach((workshop, i) => {
+      text += `${i + 1}. ${workshop.name}\n`;
+      text += `   📍 ${workshop.address || "Address not available"}\n`;
+      text += `   📞 ${workshop.phone || "N/A"}\n`;
+      if (workshop.rating) {
+        text += `   ⭐ ${workshop.rating}/5\n`;
+      }
+      text += `\n`;
     });
-  }
 
-  return text.trim();
-};
+    return {
+      id: genId(),
+      sender: "ai",
+      text: text.trim(),
+      timestamp: timeNow(),
+    };
+  };
+
+  // Alternative format for workshop bubble
+  const formatWorkshopBubble = (workshopData) => {
+    return formatWorkshopAgentReply(workshopData);
+  };
 
   const callBackend = async (userMessage) => {
     const token = await getToken();
@@ -124,31 +176,27 @@ export default function Chat() {
     return res.json();
   };
 
-  // =========================
-  // SEND MESSAGE
-  // =========================
+  // Send message function
   const sendMessage = async () => {
     if (!message.trim() || isSending) return;
 
     const userText = message.trim();
     setIsSending(true);
     setMessage("");
-    setMessage("");
 
+    // Add user message to chat
     setMessages((prev) => [
       ...prev,
       {
         id: genId(),
         sender: "user",
-        id: genId(),
-        sender: "user",
         text: userText,
-        timestamp: timeNow(),
         timestamp: timeNow(),
       },
     ]);
 
     try {
+      // Call backend for AI response
       const data = await callBackend(userText);
 
       // Show agent reply
@@ -171,46 +219,18 @@ export default function Chat() {
         const location = await getDeviceLocation();
 
         const workshopResponse = await fetchWorkshops({
-        const workshopResponse = await fetchWorkshops({
           latitude: location.latitude,
           longitude: location.longitude,
           token,
         });
 
-        const agentReply = formatWorkshopAgentReply(workshopResponse);
-
-        setMessages((prev) => [...prev, agentReply]);
-        return;
-      }
-
-      // 🤖 NORMAL AGENT FLOW
-      const token = await getToken();
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/vehicle/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ message: userText }),
-        }
-      );
-
-      if (!res.ok) throw new Error("Agent failed");
-
-      const data = await res.json();
-
-        setMessages((prev) => [
-          ...prev,
-          formatWorkshopBubble(workshopResponse),
-        ]);
+        const workshopMessage = formatWorkshopAgentReply(workshopResponse);
+        setMessages((prev) => [...prev, workshopMessage]);
       }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
-          id: genId(),
           id: genId(),
           sender: "ai",
           text: `⚠️ ${err.message || "Something went wrong"}`,
@@ -222,42 +242,41 @@ export default function Chat() {
     }
   };
 
-  // ---------- RENDER MESSAGE ----------
-
-  const renderMessage = ({ item }) => {
+  // Render message bubble
+  const renderMessage = useCallback(({ item }) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = item.text.split(urlRegex);
 
     return (
       <View
         style={[
-          styles.messageContainer,
+          messageStyles.messageContainer,
           item.sender === "user"
-            ? styles.userContainer
-            : styles.aiContainer,
+            ? messageStyles.userContainer
+            : messageStyles.aiContainer,
         ]}
       >
         <View
           style={[
-            styles.bubble,
+            messageStyles.bubble,
             item.sender === "user"
-              ? styles.userBubble
-              : styles.aiBubble,
+              ? messageStyles.userBubble
+              : messageStyles.aiBubble,
           ]}
         >
           <Text
             style={[
-              styles.messageText,
+              messageStyles.messageText,
               item.sender === "user"
-                ? styles.userText
-                : styles.aiText,
+                ? messageStyles.userText
+                : messageStyles.aiText,
             ]}
           >
             {parts.map((part, i) =>
               urlRegex.test(part) ? (
                 <Text
                   key={i}
-                  style={styles.link}
+                  style={messageStyles.link}
                   onPress={() => Linking.openURL(part)}
                 >
                   {part}
@@ -267,14 +286,13 @@ export default function Chat() {
               )
             )}
           </Text>
-          <Text style={styles.timestamp}>{item.timestamp}</Text>
+          <Text style={messageStyles.timestamp}>{item.timestamp}</Text>
         </View>
       </View>
     );
-  };
+  }, []);
 
-  // ---------- UI ----------
-
+  // Main UI
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -283,7 +301,7 @@ export default function Chat() {
       {/* Status Bar */}
       <StatusBar barStyle="light-content" backgroundColor="#27374D" />
 
-      {/* Header - Fixed with proper spacing */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={toggleSidebar}>
           <Ionicons name="menu" size={28} color="#fff" />
@@ -409,9 +427,50 @@ export default function Chat() {
   );
 }
 
-// =========================
-// STYLES
-// =========================
+// Styles - Define before component uses them
+const messageStyles = {
+  messageContainer: { 
+    marginBottom: 12 
+  },
+  userContainer: {
+    alignItems: "flex-end",
+  },
+  aiContainer: {
+    alignItems: "flex-start",
+  },
+  bubble: {
+    padding: 14,
+    borderRadius: 16,
+    maxWidth: "80%",
+  },
+  userBubble: { 
+    backgroundColor: "#27374D",
+  },
+  aiBubble: { 
+    backgroundColor: "#9DB2BF",
+  },
+  messageText: { 
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  userText: { 
+    color: "#fff" 
+  },
+  aiText: { 
+    color: "#27374D" 
+  },
+  timestamp: { 
+    fontSize: 10, 
+    marginTop: 4, 
+    color: "#666",
+    opacity: 0.7,
+  },
+  link: {
+    color: "#1E90FF",
+    textDecorationLine: "underline",
+  },
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -426,20 +485,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  messagesList: { padding: 16 },
-  messageContainer: { marginBottom: 12 },
-  bubble: {
-    padding: 14,
-    borderRadius: 16,
-    maxWidth: "80%",
+  headerTitle: { 
+    color: "#fff", 
+    fontSize: 18, 
+    fontWeight: "700" 
   },
-  userBubble: { backgroundColor: "#27374D", alignSelf: "flex-end" },
-  aiBubble: { backgroundColor: "#9DB2BF", alignSelf: "flex-start" },
-  messageText: { fontSize: 15 },
-  userText: { color: "#fff" },
-  aiText: { color: "#27374D" },
-  timestamp: { fontSize: 10, marginTop: 4, color: "#555" },
+  logoutBtn: {
+    padding: 4,
+  },
+  messagesList: { 
+    padding: 16,
+    paddingBottom: 8,
+  },
   inputBar: {
     flexDirection: "row",
     padding: 12,
@@ -455,8 +512,112 @@ const styles = StyleSheet.create({
     marginRight: 8,
     maxHeight: 100,
     color: "#27374D",
+    paddingVertical: 8,
   },
   sendBtn: {
     padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+  },
+  sidebar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: SIDEBAR_WIDTH,
+    backgroundColor: "#fff",
+    zIndex: 1000,
+    elevation: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  sidebarHeader: {
+    backgroundColor: "#27374D",
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 20 : 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sidebarHeaderIcon: {
+    marginRight: 12,
+  },
+  sidebarTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  sidebarContent: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: "#27374D",
+    fontWeight: "500",
+  },
+  sidebarFooter: {
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    padding: 20,
+  },
+  userInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  userInfoAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#27374D",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  userInfoAvatarText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  userInfoText: {
+    flex: 1,
+  },
+  userInfoName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#27374D",
+    marginBottom: 2,
+  },
+  userInfoEmail: {
+    fontSize: 13,
+    color: "#666",
+  },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    zIndex: 999,
   },
 });
