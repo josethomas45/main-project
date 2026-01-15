@@ -227,7 +227,10 @@ const handleDeleteReminder = (id) => {
         <Text style={styles.reminderTitle}>{item.service_type}</Text>
 
         {/* ✏️ 🗑️ ICONS */}
-        <View style={{ flexDirection: "row", gap: 12 }}>
+        <View
+          style={{ flexDirection: "row", gap: 12, zIndex: 10 }}
+          pointerEvents="box-none"
+        >
           <TouchableOpacity onPress={() => handleEditPress(item)}>
             <Ionicons
               name="pencil-outline"
@@ -238,7 +241,10 @@ const handleDeleteReminder = (id) => {
 
           <TouchableOpacity
             onPress={() => handleDeleteReminder(item.id)}
-          >
+            activeOpacity={0.6}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ zIndex: 20 }}
+            >
             <Ionicons
               name="trash-outline"
               size={20}
