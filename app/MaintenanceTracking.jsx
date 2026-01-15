@@ -63,7 +63,7 @@ export default function MaintenanceTracking() {
   const loadRules = async () => {
     try {
       const res = await fetchMaintenanceRules();
-      setRules(res.data || []);
+      setRules(res.data || res || []);
     } catch {
       Alert.alert("Error", "Failed to load service types");
     }
@@ -91,6 +91,28 @@ export default function MaintenanceTracking() {
       return;
     }
 
+    // -----------------------------
+    // NEXT DUE CALCULATION
+    // -----------------------------
+    let next_due_km = null;
+    let next_due_date = null;
+
+    if (
+      selectedRule?.interval_km &&
+      newReminder.odometer_km
+    ) {
+      next_due_km =
+        Number(newReminder.odometer_km) + selectedRule.interval_km;
+    }
+
+    if (selectedRule?.interval_days) {
+      const baseDate = new Date(newReminder.service_date);
+      baseDate.setDate(
+        baseDate.getDate() + selectedRule.interval_days
+      );
+      next_due_date = baseDate.toISOString().split("T")[0];
+    }
+
     try {
       await createMaintenance(
         {
@@ -101,6 +123,8 @@ export default function MaintenanceTracking() {
             ? Number(newReminder.odometer_km)
             : null,
           notes: newReminder.notes,
+          next_due_km,
+          next_due_date,
         },
         getToken
       );
@@ -209,7 +233,11 @@ export default function MaintenanceTracking() {
                   <Picker
                     selectedValue={newReminder.service_type}
                     onValueChange={(v) =>
-                      setNewReminder({ ...newReminder, service_type: v })
+                      setNewReminder({
+                        ...newReminder,
+                        service_type: v,
+                        odometer_km: "",
+                      })
                     }
                   >
                     <Picker.Item label="Select service type" value="" />
