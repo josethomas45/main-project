@@ -113,7 +113,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "time-outline",
       label: "History",
       onPress: () => {
-        console.log("Navigate to History");
+        router.push("history");
         onClose();
       },
     },
@@ -209,7 +209,7 @@ export default function Chat() {
     {
       id: "welcome",
       sender: "ai",
-      text: `Hi ${user?.firstName || "there"} 👋 How can I help you today?`,
+      text: `Hi ${user?.firstName || "there"} , How can I help you today?`,
       timestamp: timeNow(),
     },
   ]);
