@@ -36,11 +36,12 @@ export async function createMaintenance(data, getToken) {
   return res.json();
 }
 
+/* ✅ FIX 1: PUT → PATCH */
 export async function updateMaintenance(id, data, getToken) {
   const token = await getToken();
 
   const res = await fetch(`${BACKEND_URL}/maintenance/${id}`, {
-    method: "PUT",
+    method: "PATCH", // ✅ CORRECT
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
@@ -52,6 +53,7 @@ export async function updateMaintenance(id, data, getToken) {
   return res.json();
 }
 
+/* ✅ FIX 2: return response so UI can react */
 export async function deleteMaintenance(id, getToken) {
   const token = await getToken();
 
@@ -63,6 +65,8 @@ export async function deleteMaintenance(id, getToken) {
   });
 
   if (!res.ok) throw new Error("Failed to delete maintenance");
+
+  return true; // ✅ important
 }
 
 /* =======================
@@ -78,4 +82,3 @@ export async function fetchMaintenanceRules() {
 
   return res.json();
 }
- 
