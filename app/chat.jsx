@@ -379,7 +379,7 @@ export default function Chat() {
         >
           <Ionicons name="menu" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Vasu The Mech</Text>
+        <Text style={styles.headerTitle}>AutoVitals</Text>
         <View style={styles.headerSpacer} />
       </View>
 

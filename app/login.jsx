@@ -56,7 +56,7 @@ export default function Login() {
         <View style={styles.iconContainer}>
           <Ionicons name="chatbubbles" size={48} color="#FFFFFF" />
         </View>
-        <Text style={styles.title}>Vasu The Mech</Text>
+        <Text style={styles.title}>AutoVitals</Text>
         <Text style={styles.subtitle}>Your AI Companion</Text>
       </View>
 
