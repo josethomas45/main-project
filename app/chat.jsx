@@ -51,11 +51,11 @@ function formatAIResponse(data) {
   let text = "";
 
   if (data.diagnosis) {
-    text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
+    text += ` Diagnosis:\n${data.diagnosis}\n\n`;
   }
 
   if (data.explanation) {
-    text += `🧠 Explanation:\n${data.explanation}\n\n`;
+    text += ` Explanation:\n${data.explanation}\n\n`;
   }
 
   if (Array.isArray(data.steps) && data.steps.length > 0) {
@@ -70,7 +70,7 @@ function formatAIResponse(data) {
     Array.isArray(data.follow_up_questions) &&
     data.follow_up_questions.length > 0
   ) {
-    text += "❓ Follow-up Questions:\n";
+    text += " Follow-up Questions:\n";
     data.follow_up_questions.forEach((q, i) => {
       text += `${i + 1}. ${q}\n`;
     });
@@ -78,7 +78,7 @@ function formatAIResponse(data) {
   }
 
   if (typeof data.severity === "number") {
-    text += `🔥 Severity: ${Math.round(data.severity * 100)}%\n`;
+    text += `⚠️ Severity: ${Math.round(data.severity * 100)}%\n`;
   }
 
   return text.trim() || "⚠️ No response from agent";
