@@ -1,7 +1,8 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Picker } from "@react-native-picker/picker";
 import {
   Alert,
   FlatList,
@@ -11,294 +12,171 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
-export default function MaintenanceReminder() {
+import {
+  fetchMaintenance,
+  createMaintenance,
+  fetchMaintenanceRules,
+} from "../utils/maintenance";
+
+// DEV ONLY
+const DEV_VEHICLE_ID = "c6df84cb-90e9-4307-9f39-779dcaba9dd3";
+
+// helpers
+const todayISO = () => new Date().toISOString().split("T")[0];
+const toDDMMYYYY = (iso) => {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+};
+
+export default function MaintenanceTracking() {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, getToken } = useAuth();
   const { user } = useUser();
-  
+
+  const [rules, setRules] = useState([]);
+  const [reminders, setReminders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showOptionsModal, setShowOptionsModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedReminder, setSelectedReminder] = useState(null);
-  
-  // Form state for new reminder
+
   const [newReminder, setNewReminder] = useState({
-    title: "",
-    description: "",
-    dueDate: "",
-    priority: "medium"
+    service_type: "",
+    notes: "",
+    service_date: todayISO(),
+    odometer_km: "",
   });
-  
-  // Form state for editing reminder
-  const [editReminder, setEditReminder] = useState({
-    title: "",
-    description: "",
-    dueDate: "",
-    priority: "medium"
-  });
-  
-  // Sample maintenance reminders data
-  const [reminders, setReminders] = useState([
-    {
-      id: "1",
-      title: "Oil Change",
-      description: "Regular engine oil change",
-      dueDate: "2026-01-15",
-      status: "upcoming",
-      priority: "high",
-    },
-    {
-      id: "2",
-      title: "Tire Rotation",
-      description: "Rotate tires for even wear",
-      dueDate: "2026-01-20",
-      status: "upcoming",
-      priority: "medium",
-    },
-    {
-      id: "3",
-      title: "Brake Inspection",
-      description: "Check brake pads and rotors",
-      dueDate: "2026-02-01",
-      status: "upcoming",
-      priority: "high",
-    },
-    {
-      id: "4",
-      title: "Air Filter Replacement",
-      description: "Replace cabin and engine air filters",
-      dueDate: "2026-02-10",
-      status: "upcoming",
-      priority: "low",
-    },
-  ]);
 
-  const handleBack = () => {
-    router.back();
+  const selectedRule = rules.find(
+    (r) => r.service_type === newReminder.service_type
+  );
+
+  useEffect(() => {
+    loadReminders();
+    loadRules();
+  }, []);
+
+  const loadRules = async () => {
+    try {
+      const res = await fetchMaintenanceRules();
+      setRules(res.data || res || []);
+    } catch {
+      Alert.alert("Error", "Failed to load service types");
+    }
   };
 
-  const handleLogout = async () => {
-    setShowProfileModal(false);
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Logout", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              console.error("Logout error:", error);
-              Alert.alert("Error", "Failed to logout. Please try again.");
-            }
-          }
-        }
-      ]
-    );
+  const loadReminders = async () => {
+    try {
+      const res = await fetchMaintenance(getToken);
+      setReminders(res.data || []);
+    } catch {
+      Alert.alert("Error", "Failed to load maintenance");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddReminder = () => {
-    // Validate inputs
-    if (!newReminder.title.trim()) {
-      Alert.alert("Error", "Please enter a title");
-      return;
-    }
-    if (!newReminder.description.trim()) {
-      Alert.alert("Error", "Please enter a description");
-      return;
-    }
-    if (!newReminder.dueDate.trim()) {
-      Alert.alert("Error", "Please enter a due date (YYYY-MM-DD)");
+  const handleAddReminder = async () => {
+    if (!newReminder.service_type) {
+      Alert.alert("Error", "Select service type");
       return;
     }
 
-    // Add new reminder
-    const reminder = {
-      id: Date.now().toString(),
-      title: newReminder.title,
-      description: newReminder.description,
-      dueDate: newReminder.dueDate,
-      status: "upcoming",
-      priority: newReminder.priority
-    };
-
-    setReminders([...reminders, reminder]);
-    
-    // Reset form and close modal
-    setNewReminder({
-      title: "",
-      description: "",
-      dueDate: "",
-      priority: "medium"
-    });
-    setShowAddModal(false);
-    
-    Alert.alert("Success", "Reminder added successfully!");
-  };
-
-  const handleReminderPress = (item) => {
-    setSelectedReminder(item);
-    setShowOptionsModal(true);
-  };
-
-  const handleEditPress = () => {
-    if (!selectedReminder) return;
-    
-    setEditReminder({
-      title: selectedReminder.title,
-      description: selectedReminder.description,
-      dueDate: selectedReminder.dueDate,
-      priority: selectedReminder.priority
-    });
-    setShowOptionsModal(false);
-    setShowEditModal(true);
-  };
-
-  const handleUpdateReminder = () => {
-    if (!selectedReminder) return;
-    
-    // Validate inputs
-    if (!editReminder.title.trim()) {
-      Alert.alert("Error", "Please enter a title");
-      return;
-    }
-    if (!editReminder.description.trim()) {
-      Alert.alert("Error", "Please enter a description");
-      return;
-    }
-    if (!editReminder.dueDate.trim()) {
-      Alert.alert("Error", "Please enter a due date (YYYY-MM-DD)");
+    if (selectedRule?.requires_odometer && !newReminder.odometer_km) {
+      Alert.alert("Error", "Odometer reading required");
       return;
     }
 
-    // Update reminder
-    const updatedReminders = reminders.map(reminder => 
-      reminder.id === selectedReminder.id 
-        ? {
-            ...reminder,
-            title: editReminder.title,
-            description: editReminder.description,
-            dueDate: editReminder.dueDate,
-            priority: editReminder.priority
-          }
-        : reminder
-    );
+    // -----------------------------
+    // NEXT DUE CALCULATION
+    // -----------------------------
+    let next_due_km = null;
+    let next_due_date = null;
 
-    setReminders(updatedReminders);
-    setShowEditModal(false);
-    setSelectedReminder(null);
-    
-    Alert.alert("Success", "Reminder updated successfully!");
-  };
-
-  const handleDeletePress = () => {
-    if (!selectedReminder) return;
-    
-    setShowOptionsModal(false);
-    
-    Alert.alert(
-      "Delete Reminder",
-      "Are you sure you want to delete this reminder?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive",
-          onPress: () => {
-            const filteredReminders = reminders.filter(
-              reminder => reminder.id !== selectedReminder.id
-            );
-            setReminders(filteredReminders);
-            setSelectedReminder(null);
-            Alert.alert("Success", "Reminder deleted successfully!");
-          }
-        }
-      ]
-    );
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case "high":
-        return "#FF6B6B";
-      case "medium":
-        return "#FFA500";
-      case "low":
-        return "#4CAF50";
-      default:
-        return "#9DB2BF";
+    if (
+      selectedRule?.interval_km &&
+      newReminder.odometer_km
+    ) {
+      next_due_km =
+        Number(newReminder.odometer_km) + selectedRule.interval_km;
     }
-  };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", { 
-      month: "short", 
-      day: "numeric", 
-      year: "numeric" 
-    });
+    if (selectedRule?.interval_days) {
+      const baseDate = new Date(newReminder.service_date);
+      baseDate.setDate(
+        baseDate.getDate() + selectedRule.interval_days
+      );
+      next_due_date = baseDate.toISOString().split("T")[0];
+    }
+
+    try {
+      await createMaintenance(
+        {
+          vehicle_id: DEV_VEHICLE_ID,
+          service_type: newReminder.service_type,
+          service_date: newReminder.service_date,
+          odometer_km: newReminder.odometer_km
+            ? Number(newReminder.odometer_km)
+            : null,
+          notes: newReminder.notes,
+          next_due_km,
+          next_due_date,
+        },
+        getToken
+      );
+
+      setShowAddModal(false);
+      setNewReminder({
+        service_type: "",
+        notes: "",
+        service_date: todayISO(),
+        odometer_km: "",
+      });
+      await loadReminders();
+      Alert.alert("Success", "Maintenance added");
+    } catch {
+      Alert.alert("Error", "Failed to add maintenance");
+    }
   };
 
   const renderReminder = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.reminderCard}
-      onPress={() => handleReminderPress(item)}
-    >
+    <View style={styles.reminderCard}>
       <View style={styles.reminderHeader}>
-        <View style={styles.reminderTitleContainer}>
-          <View style={[
-            styles.priorityDot,
-            { backgroundColor: getPriorityColor(item.priority) }
-          ]} />
-          <Text style={styles.reminderTitle}>{item.title}</Text>
-        </View>
-        <View style={[
-          styles.priorityBadge,
-          { backgroundColor: getPriorityColor(item.priority) + "20" }
-        ]}>
-          <Text style={[
-            styles.priorityText,
-            { color: getPriorityColor(item.priority) }
-          ]}>
-            {item.priority.toUpperCase()}
-          </Text>
-        </View>
+        <Text style={styles.reminderTitle}>{item.service_type}</Text>
       </View>
-      
-      <Text style={styles.reminderDescription}>{item.description}</Text>
-      
+
+      <Text style={styles.reminderDescription}>{item.notes || "—"}</Text>
+
       <View style={styles.reminderFooter}>
         <View style={styles.dueDateContainer}>
           <Ionicons name="calendar-outline" size={16} color="#526D82" />
-          <Text style={styles.dueDate}>{formatDate(item.dueDate)}</Text>
+          <Text style={styles.dueDate}>
+            {toDDMMYYYY(item.service_date)}
+          </Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#9DB2BF" />
       </View>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerCenter}>
           <Ionicons name="alarm-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.headerTitle}>Maintenance Reminders</Text>
+          <Text style={styles.headerTitle}>Maintenance</Text>
         </View>
-        
-        <TouchableOpacity 
-          onPress={() => setShowProfileModal(true)} 
+
+        <TouchableOpacity
+          onPress={() => setShowProfileModal(true)}
           style={styles.profileBtn}
         >
           <View style={styles.profileAvatar}>
@@ -309,258 +187,118 @@ export default function MaintenanceReminder() {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      <View style={styles.content}>
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{reminders.length}</Text>
-            <Text style={styles.statLabel}>Total Reminders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: "#FF6B6B" }]}>
-              {reminders.filter(r => r.priority === "high").length}
-            </Text>
-            <Text style={styles.statLabel}>High Priority</Text>
-          </View>
-        </View>
-
-        <FlatList
-          data={reminders}
-          keyExtractor={(item) => item.id}
-          renderItem={renderReminder}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
+      <FlatList
+        data={reminders}
+        keyExtractor={(item) => item.id}
+        renderItem={renderReminder}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          !loading && (
             <View style={styles.emptyContainer}>
               <Ionicons name="alarm-outline" size={64} color="#9DB2BF" />
-              <Text style={styles.emptyText}>No maintenance reminders</Text>
+              <Text style={styles.emptyText}>No maintenance records</Text>
               <Text style={styles.emptySubtext}>
-                Add your first reminder to get started
+                Add your first maintenance entry
               </Text>
             </View>
-          }
-        />
-      </View>
+          )
+        }
+      />
 
-      {/* Floating Add Button */}
-      <TouchableOpacity 
+      {/* Add Button */}
+      <TouchableOpacity
         style={styles.addButton}
         onPress={() => setShowAddModal(true)}
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
-      {/* Add Reminder Modal */}
-      <Modal
-        visible={showAddModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowAddModal(false)}
-      >
+      {/* Add Modal */}
+      <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.addModalContent}>
             <View style={styles.addModalHeader}>
-              <Text style={styles.addModalTitle}>Add New Reminder</Text>
+              <Text style={styles.addModalTitle}>Add Maintenance</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close" size={28} color="#27374D" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView>
+              {/* SERVICE TYPE DROPDOWN */}
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Title *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Oil Change"
-                  value={newReminder.title}
-                  onChangeText={(text) => setNewReminder({...newReminder, title: text})}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Description *</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Enter description"
-                  value={newReminder.description}
-                  onChangeText={(text) => setNewReminder({...newReminder, description: text})}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Due Date * (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="2026-01-15"
-                  value={newReminder.dueDate}
-                  onChangeText={(text) => setNewReminder({...newReminder, dueDate: text})}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Priority</Text>
-                <View style={styles.priorityButtons}>
-                  {["low", "medium", "high"].map((priority) => (
-                    <TouchableOpacity
-                      key={priority}
-                      style={[
-                        styles.priorityButton,
-                        newReminder.priority === priority && styles.priorityButtonActive,
-                        { borderColor: getPriorityColor(priority) }
-                      ]}
-                      onPress={() => setNewReminder({...newReminder, priority})}
-                    >
-                      <Text style={[
-                        styles.priorityButtonText,
-                        newReminder.priority === priority && { color: getPriorityColor(priority) }
-                      ]}>
-                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                <Text style={styles.label}>Service Type</Text>
+                <View style={styles.input}>
+                  <Picker
+                    selectedValue={newReminder.service_type}
+                    onValueChange={(v) =>
+                      setNewReminder({
+                        ...newReminder,
+                        service_type: v,
+                        odometer_km: "",
+                      })
+                    }
+                  >
+                    <Picker.Item label="Select service type" value="" />
+                    {rules.map((r) => (
+                      <Picker.Item
+                        key={r.service_type}
+                        label={r.display_name}
+                        value={r.service_type}
+                      />
+                    ))}
+                  </Picker>
                 </View>
               </View>
 
-              <TouchableOpacity 
-                style={styles.submitButton}
+              {/* NOTES */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Notes</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  multiline
+                  value={newReminder.notes}
+                  onChangeText={(t) =>
+                    setNewReminder({ ...newReminder, notes: t })
+                  }
+                />
+              </View>
+
+              {/* SERVICE DATE */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Service Date</Text>
+                <TextInput
+                  style={styles.input}
+                  editable={false}
+                  value={toDDMMYYYY(newReminder.service_date)}
+                />
+              </View>
+
+              {/* ODOMETER (CONDITIONAL) */}
+              {selectedRule?.requires_odometer && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Odometer (km)</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={newReminder.odometer_km}
+                    onChangeText={(t) =>
+                      setNewReminder({ ...newReminder, odometer_km: t })
+                    }
+                  />
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  !newReminder.service_type && { opacity: 0.6 },
+                ]}
+                disabled={!newReminder.service_type}
                 onPress={handleAddReminder}
               >
-                <Text style={styles.submitButtonText}>Add Reminder</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Options Modal */}
-      {selectedReminder && (
-        <Modal
-          visible={showOptionsModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowOptionsModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.optionsModalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowOptionsModal(false)}
-          >
-            <View style={styles.optionsModal}>
-              <View style={styles.optionsModalHeader}>
-                <Text style={styles.optionsModalTitle}>
-                  {selectedReminder.title}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.optionsModalButton}
-                onPress={handleEditPress}
-              >
-                <Ionicons name="create-outline" size={24} color="#27374D" />
-                <Text style={styles.optionsModalButtonText}>Edit Reminder</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.optionsModalButton, styles.deleteButton]}
-                onPress={handleDeletePress}
-              >
-                <Ionicons name="trash-outline" size={24} color="#FF6B6B" />
-                <Text style={[styles.optionsModalButtonText, styles.deleteButtonText]}>
-                  Delete Reminder
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowOptionsModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      )}
-
-      {/* Edit Reminder Modal */}
-      <Modal
-        visible={showEditModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowEditModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.addModalContent}>
-            <View style={styles.addModalHeader}>
-              <Text style={styles.addModalTitle}>Edit Reminder</Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <Ionicons name="close" size={28} color="#27374D" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Title *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Oil Change"
-                  value={editReminder.title}
-                  onChangeText={(text) => setEditReminder({...editReminder, title: text})}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Description *</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Enter description"
-                  value={editReminder.description}
-                  onChangeText={(text) => setEditReminder({...editReminder, description: text})}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Due Date * (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="2026-01-15"
-                  value={editReminder.dueDate}
-                  onChangeText={(text) => setEditReminder({...editReminder, dueDate: text})}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Priority</Text>
-                <View style={styles.priorityButtons}>
-                  {["low", "medium", "high"].map((priority) => (
-                    <TouchableOpacity
-                      key={priority}
-                      style={[
-                        styles.priorityButton,
-                        editReminder.priority === priority && styles.priorityButtonActive,
-                        { borderColor: getPriorityColor(priority) }
-                      ]}
-                      onPress={() => setEditReminder({...editReminder, priority})}
-                    >
-                      <Text style={[
-                        styles.priorityButtonText,
-                        editReminder.priority === priority && { color: getPriorityColor(priority) }
-                      ]}>
-                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <TouchableOpacity 
-                style={styles.submitButton}
-                onPress={handleUpdateReminder}
-              >
-                <Text style={styles.submitButtonText}>Update Reminder</Text>
+                <Text style={styles.submitButtonText}>Save</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -568,61 +306,23 @@ export default function MaintenanceReminder() {
       </Modal>
 
       {/* Profile Modal */}
-      <Modal
-        visible={showProfileModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowProfileModal(false)}
-      >
+      <Modal visible={showProfileModal} transparent animationType="fade">
         <TouchableOpacity
           style={styles.profileModalOverlay}
           activeOpacity={1}
           onPress={() => setShowProfileModal(false)}
         >
           <View style={styles.profileModal}>
-            <View style={styles.profileModalHeader}>
-              <View style={styles.profileModalAvatar}>
-                <Text style={styles.profileModalAvatarText}>
-                  {user?.firstName?.charAt(0)?.toUpperCase() || "U"}
-                </Text>
-              </View>
-              <View style={styles.profileModalInfo}>
-                <Text style={styles.profileModalName}>
-                  {user?.firstName || "User"} {user?.lastName || ""}
-                </Text>
-                <Text style={styles.profileModalEmail}>
-                  {user?.primaryEmailAddress?.emailAddress || "No email"}
-                </Text>
-              </View>
-            </View>
+            <Text style={styles.profileModalName}>
+              {user?.firstName} {user?.lastName}
+            </Text>
 
-            <View style={styles.profileModalDivider} />
-
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.profileModalOption}
-              onPress={() => {
+              onPress={async () => {
                 setShowProfileModal(false);
-                Alert.alert("Coming Soon", "Profile settings will be available soon!");
+                await signOut();
               }}
-            >
-              <Ionicons name="person-outline" size={24} color="#27374D" />
-              <Text style={styles.profileModalOptionText}>View Profile</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.profileModalOption}
-              onPress={() => {
-                setShowProfileModal(false);
-                Alert.alert("Coming Soon", "Settings will be available soon!");
-              }}
-            >
-              <Ionicons name="settings-outline" size={24} color="#27374D" />
-              <Text style={styles.profileModalOptionText}>Settings</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.profileModalOption, styles.logoutOption]}
-              onPress={handleLogout}
             >
               <Ionicons name="log-out-outline" size={24} color="#FF6B6B" />
               <Text style={[styles.profileModalOptionText, styles.logoutText]}>
