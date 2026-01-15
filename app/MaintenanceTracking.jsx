@@ -72,7 +72,7 @@ export default function MaintenanceTracking() {
   const loadReminders = async () => {
     try {
       const res = await fetchMaintenance(getToken);
-      setReminders(res.data || []);
+      setReminders(res.data || res || []);
     } catch {
       Alert.alert("Error", "Failed to load maintenance");
     } finally {
@@ -86,21 +86,23 @@ export default function MaintenanceTracking() {
       return;
     }
 
-    if (selectedRule?.requires_odometer && !newReminder.odometer_km) {
+    if (
+      selectedRule?.requires_odometer &&
+      (!newReminder.odometer_km ||
+        Number(newReminder.odometer_km) <= 0)
+    ) {
       Alert.alert("Error", "Odometer reading required");
       return;
     }
 
-    // -----------------------------
-    // NEXT DUE CALCULATION
-    // -----------------------------
+    // --------------------------------------------------
+    // NEXT DUE CALCULATION (INTENTIONALLY KEPT)
+    // --------------------------------------------------
+    // ⚠️ DB trigger computes these, so we DO NOT send them
     let next_due_km = null;
     let next_due_date = null;
 
-    if (
-      selectedRule?.interval_km &&
-      newReminder.odometer_km
-    ) {
+    if (selectedRule?.interval_km && newReminder.odometer_km) {
       next_due_km =
         Number(newReminder.odometer_km) + selectedRule.interval_km;
     }
@@ -112,6 +114,7 @@ export default function MaintenanceTracking() {
       );
       next_due_date = baseDate.toISOString().split("T")[0];
     }
+    // --------------------------------------------------
 
     try {
       await createMaintenance(
@@ -119,12 +122,15 @@ export default function MaintenanceTracking() {
           vehicle_id: DEV_VEHICLE_ID,
           service_type: newReminder.service_type,
           service_date: newReminder.service_date,
-          odometer_km: newReminder.odometer_km
+          odometer_km: selectedRule?.requires_odometer
             ? Number(newReminder.odometer_km)
             : null,
-          notes: newReminder.notes,
-          next_due_km,
-          next_due_date,
+          notes: newReminder.notes || null,
+
+          // ❌ intentionally NOT sent:
+          // next_due_km
+          // next_due_date
+          // status
         },
         getToken
       );
@@ -136,6 +142,7 @@ export default function MaintenanceTracking() {
         service_date: todayISO(),
         odometer_km: "",
       });
+
       await loadReminders();
       Alert.alert("Success", "Maintenance added");
     } catch {
@@ -226,7 +233,7 @@ export default function MaintenanceTracking() {
             </View>
 
             <ScrollView>
-              {/* SERVICE TYPE DROPDOWN */}
+              {/* SERVICE TYPE */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Service Type</Text>
                 <View style={styles.input}>
@@ -275,7 +282,7 @@ export default function MaintenanceTracking() {
                 />
               </View>
 
-              {/* ODOMETER (CONDITIONAL) */}
+              {/* ODOMETER */}
               {selectedRule?.requires_odometer && (
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>Odometer (km)</Text>
@@ -284,7 +291,10 @@ export default function MaintenanceTracking() {
                     keyboardType="numeric"
                     value={newReminder.odometer_km}
                     onChangeText={(t) =>
-                      setNewReminder({ ...newReminder, odometer_km: t })
+                      setNewReminder({
+                        ...newReminder,
+                        odometer_km: t,
+                      })
                     }
                   />
                 </View>
@@ -335,6 +345,9 @@ export default function MaintenanceTracking() {
     </View>
   );
 }
+
+/* ---------------- STYLES (UNCHANGED) ---------------- */
+
 
 const styles = StyleSheet.create({
   container: {
