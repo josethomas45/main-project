@@ -188,27 +188,38 @@ export default function MaintenanceTracking() {
   };
 
   // 🗑️ DELETE
-  const handleDeleteReminder = (id) => {
-    Alert.alert(
-      "Delete Maintenance",
-      "Are you sure you want to delete this record?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteMaintenance(id, getToken);
-              await loadReminders();
-            } catch {
-              Alert.alert("Error", "Failed to delete maintenance");
-            }
-          },
+  // 🗑️ DELETE (FIXED)
+const handleDeleteReminder = (id) => {
+  Alert.alert(
+    "Delete Maintenance",
+    "Are you sure you want to delete this record?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          console.log("DELETE CLICKED:", id);
+
+          try {
+            await deleteMaintenance(id, getToken);
+
+            // ✅ OPTIMISTIC UI UPDATE
+            setReminders((prev) =>
+              prev.filter((item) => item.id !== id)
+            );
+
+            Alert.alert("Deleted", "Maintenance record deleted");
+          } catch (err) {
+            console.error("Delete failed:", err);
+            Alert.alert("Error", "Failed to delete maintenance");
+          }
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
+
 
   const renderReminder = ({ item }) => (
     <View style={styles.reminderCard}>
