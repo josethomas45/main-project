@@ -19,6 +19,8 @@ import {
   fetchMaintenance,
   createMaintenance,
   fetchMaintenanceRules,
+  updateMaintenance,
+  deleteMaintenance,
 } from "../utils/maintenance";
 
 // DEV ONLY
@@ -43,6 +45,10 @@ export default function MaintenanceTracking() {
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // ✅ ADDED
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingReminder, setEditingReminder] = useState(null);
 
   const [newReminder, setNewReminder] = useState({
     service_type: "",
@@ -95,27 +101,6 @@ export default function MaintenanceTracking() {
       return;
     }
 
-    // --------------------------------------------------
-    // NEXT DUE CALCULATION (INTENTIONALLY KEPT)
-    // --------------------------------------------------
-    // ⚠️ DB trigger computes these, so we DO NOT send them
-    let next_due_km = null;
-    let next_due_date = null;
-
-    if (selectedRule?.interval_km && newReminder.odometer_km) {
-      next_due_km =
-        Number(newReminder.odometer_km) + selectedRule.interval_km;
-    }
-
-    if (selectedRule?.interval_days) {
-      const baseDate = new Date(newReminder.service_date);
-      baseDate.setDate(
-        baseDate.getDate() + selectedRule.interval_days
-      );
-      next_due_date = baseDate.toISOString().split("T")[0];
-    }
-    // --------------------------------------------------
-
     try {
       await createMaintenance(
         {
@@ -126,11 +111,6 @@ export default function MaintenanceTracking() {
             ? Number(newReminder.odometer_km)
             : null,
           notes: newReminder.notes || null,
-
-          // ❌ intentionally NOT sent:
-          // next_due_km
-          // next_due_date
-          // status
         },
         getToken
       );
@@ -150,10 +130,128 @@ export default function MaintenanceTracking() {
     }
   };
 
+  // ✏️ EDIT
+  const handleEditPress = (item) => {
+    setEditingReminder(item);
+    setNewReminder({
+      service_type: item.service_type,
+      notes: item.notes || "",
+      service_date: item.service_date,
+      odometer_km: item.odometer_km
+        ? item.odometer_km.toString()
+        : "",
+    });
+    setShowAddModal(true);
+  };
+
+  // 💾 UPDATE
+  const handleUpdateReminder = async () => {
+    if (!editingReminder) return;
+
+    if (
+      selectedRule?.requires_odometer &&
+      (!newReminder.odometer_km ||
+        Number(newReminder.odometer_km) <= 0)
+    ) {
+      Alert.alert("Error", "Valid odometer required");
+      return;
+    }
+
+    try {
+      await updateMaintenance(
+        editingReminder.id,
+        {
+          service_date: newReminder.service_date,
+          odometer_km: selectedRule?.requires_odometer
+            ? Number(newReminder.odometer_km)
+            : null,
+          notes: newReminder.notes || null,
+        },
+        getToken
+      );
+
+      setEditingReminder(null);
+      setShowAddModal(false);
+
+      setNewReminder({
+        service_type: "",
+        notes: "",
+        service_date: todayISO(),
+        odometer_km: "",
+      });
+
+      await loadReminders();
+      Alert.alert("Success", "Maintenance updated");
+    } catch {
+      Alert.alert("Error", "Failed to update maintenance");
+    }
+  };
+
+  // 🗑️ DELETE
+  // 🗑️ DELETE (FIXED)
+const handleDeleteReminder = (id) => {
+  Alert.alert(
+    "Delete Maintenance",
+    "Are you sure you want to delete this record?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          console.log("DELETE CLICKED:", id);
+
+          try {
+            await deleteMaintenance(id, getToken);
+
+            // ✅ OPTIMISTIC UI UPDATE
+            setReminders((prev) =>
+              prev.filter((item) => item.id !== id)
+            );
+
+            Alert.alert("Deleted", "Maintenance record deleted");
+          } catch (err) {
+            console.error("Delete failed:", err);
+            Alert.alert("Error", "Failed to delete maintenance");
+          }
+        },
+      },
+    ]
+  );
+};
+
+
   const renderReminder = ({ item }) => (
     <View style={styles.reminderCard}>
       <View style={styles.reminderHeader}>
         <Text style={styles.reminderTitle}>{item.service_type}</Text>
+
+        {/* ✏️ 🗑️ ICONS */}
+        <View
+          style={{ flexDirection: "row", gap: 12, zIndex: 10 }}
+          pointerEvents="box-none"
+        >
+          <TouchableOpacity onPress={() => handleEditPress(item)}>
+            <Ionicons
+              name="pencil-outline"
+              size={20}
+              color="#526D82"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => handleDeleteReminder(item.id)}
+            activeOpacity={0.6}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ zIndex: 20 }}
+            >
+            <Ionicons
+              name="trash-outline"
+              size={20}
+              color="#FF6B6B"
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.reminderDescription}>{item.notes || "—"}</Text>
@@ -200,33 +298,27 @@ export default function MaintenanceTracking() {
         renderItem={renderReminder}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          !loading && (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="alarm-outline" size={64} color="#9DB2BF" />
-              <Text style={styles.emptyText}>No maintenance records</Text>
-              <Text style={styles.emptySubtext}>
-                Add your first maintenance entry
-              </Text>
-            </View>
-          )
-        }
       />
 
       {/* Add Button */}
       <TouchableOpacity
         style={styles.addButton}
-        onPress={() => setShowAddModal(true)}
+        onPress={() => {
+          setEditingReminder(null);
+          setShowAddModal(true);
+        }}
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
-      {/* Add Modal */}
+      {/* Add/Edit Modal */}
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.addModalContent}>
             <View style={styles.addModalHeader}>
-              <Text style={styles.addModalTitle}>Add Maintenance</Text>
+              <Text style={styles.addModalTitle}>
+                {editingReminder ? "Edit Maintenance" : "Add Maintenance"}
+              </Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close" size={28} color="#27374D" />
               </TouchableOpacity>
@@ -238,6 +330,7 @@ export default function MaintenanceTracking() {
                 <Text style={styles.label}>Service Type</Text>
                 <View style={styles.input}>
                   <Picker
+                    enabled={!editingReminder}
                     selectedValue={newReminder.service_type}
                     onValueChange={(v) =>
                       setNewReminder({
@@ -301,14 +394,16 @@ export default function MaintenanceTracking() {
               )}
 
               <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  !newReminder.service_type && { opacity: 0.6 },
-                ]}
-                disabled={!newReminder.service_type}
-                onPress={handleAddReminder}
+                style={styles.submitButton}
+                onPress={
+                  editingReminder
+                    ? handleUpdateReminder
+                    : handleAddReminder
+                }
               >
-                <Text style={styles.submitButtonText}>Save</Text>
+                <Text style={styles.submitButtonText}>
+                  {editingReminder ? "Update" : "Save"}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
