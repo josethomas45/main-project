@@ -122,7 +122,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "person-outline",
       label: "Profile",
       onPress: () => {
-        console.log("Navigate to Profile");
+        router.push("profile");
         onClose();
       },
     },
