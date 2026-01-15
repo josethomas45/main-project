@@ -3,13 +3,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 export default function MaintenanceReminder() {
@@ -18,6 +20,26 @@ export default function MaintenanceReminder() {
   const { user } = useUser();
   
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState(null);
+  
+  // Form state for new reminder
+  const [newReminder, setNewReminder] = useState({
+    title: "",
+    description: "",
+    dueDate: "",
+    priority: "medium"
+  });
+  
+  // Form state for editing reminder
+  const [editReminder, setEditReminder] = useState({
+    title: "",
+    description: "",
+    dueDate: "",
+    priority: "medium"
+  });
   
   // Sample maintenance reminders data
   const [reminders, setReminders] = useState([
@@ -82,6 +104,126 @@ export default function MaintenanceReminder() {
     );
   };
 
+  const handleAddReminder = () => {
+    // Validate inputs
+    if (!newReminder.title.trim()) {
+      Alert.alert("Error", "Please enter a title");
+      return;
+    }
+    if (!newReminder.description.trim()) {
+      Alert.alert("Error", "Please enter a description");
+      return;
+    }
+    if (!newReminder.dueDate.trim()) {
+      Alert.alert("Error", "Please enter a due date (YYYY-MM-DD)");
+      return;
+    }
+
+    // Add new reminder
+    const reminder = {
+      id: Date.now().toString(),
+      title: newReminder.title,
+      description: newReminder.description,
+      dueDate: newReminder.dueDate,
+      status: "upcoming",
+      priority: newReminder.priority
+    };
+
+    setReminders([...reminders, reminder]);
+    
+    // Reset form and close modal
+    setNewReminder({
+      title: "",
+      description: "",
+      dueDate: "",
+      priority: "medium"
+    });
+    setShowAddModal(false);
+    
+    Alert.alert("Success", "Reminder added successfully!");
+  };
+
+  const handleReminderPress = (item) => {
+    setSelectedReminder(item);
+    setShowOptionsModal(true);
+  };
+
+  const handleEditPress = () => {
+    if (!selectedReminder) return;
+    
+    setEditReminder({
+      title: selectedReminder.title,
+      description: selectedReminder.description,
+      dueDate: selectedReminder.dueDate,
+      priority: selectedReminder.priority
+    });
+    setShowOptionsModal(false);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateReminder = () => {
+    if (!selectedReminder) return;
+    
+    // Validate inputs
+    if (!editReminder.title.trim()) {
+      Alert.alert("Error", "Please enter a title");
+      return;
+    }
+    if (!editReminder.description.trim()) {
+      Alert.alert("Error", "Please enter a description");
+      return;
+    }
+    if (!editReminder.dueDate.trim()) {
+      Alert.alert("Error", "Please enter a due date (YYYY-MM-DD)");
+      return;
+    }
+
+    // Update reminder
+    const updatedReminders = reminders.map(reminder => 
+      reminder.id === selectedReminder.id 
+        ? {
+            ...reminder,
+            title: editReminder.title,
+            description: editReminder.description,
+            dueDate: editReminder.dueDate,
+            priority: editReminder.priority
+          }
+        : reminder
+    );
+
+    setReminders(updatedReminders);
+    setShowEditModal(false);
+    setSelectedReminder(null);
+    
+    Alert.alert("Success", "Reminder updated successfully!");
+  };
+
+  const handleDeletePress = () => {
+    if (!selectedReminder) return;
+    
+    setShowOptionsModal(false);
+    
+    Alert.alert(
+      "Delete Reminder",
+      "Are you sure you want to delete this reminder?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: () => {
+            const filteredReminders = reminders.filter(
+              reminder => reminder.id !== selectedReminder.id
+            );
+            setReminders(filteredReminders);
+            setSelectedReminder(null);
+            Alert.alert("Success", "Reminder deleted successfully!");
+          }
+        }
+      ]
+    );
+  };
+
   const getPriorityColor = (priority) => {
     switch (priority) {
       case "high":
@@ -107,7 +249,7 @@ export default function MaintenanceReminder() {
   const renderReminder = ({ item }) => (
     <TouchableOpacity 
       style={styles.reminderCard}
-      onPress={() => Alert.alert("Reminder Details", item.description)}
+      onPress={() => handleReminderPress(item)}
     >
       <View style={styles.reminderHeader}>
         <View style={styles.reminderTitleContainer}>
@@ -200,6 +342,231 @@ export default function MaintenanceReminder() {
         />
       </View>
 
+      {/* Floating Add Button */}
+      <TouchableOpacity 
+        style={styles.addButton}
+        onPress={() => setShowAddModal(true)}
+      >
+        <Ionicons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      {/* Add Reminder Modal */}
+      <Modal
+        visible={showAddModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.addModalContent}>
+            <View style={styles.addModalHeader}>
+              <Text style={styles.addModalTitle}>Add New Reminder</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Ionicons name="close" size={28} color="#27374D" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Oil Change"
+                  value={newReminder.title}
+                  onChangeText={(text) => setNewReminder({...newReminder, title: text})}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Description *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Enter description"
+                  value={newReminder.description}
+                  onChangeText={(text) => setNewReminder({...newReminder, description: text})}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Due Date * (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="2026-01-15"
+                  value={newReminder.dueDate}
+                  onChangeText={(text) => setNewReminder({...newReminder, dueDate: text})}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Priority</Text>
+                <View style={styles.priorityButtons}>
+                  {["low", "medium", "high"].map((priority) => (
+                    <TouchableOpacity
+                      key={priority}
+                      style={[
+                        styles.priorityButton,
+                        newReminder.priority === priority && styles.priorityButtonActive,
+                        { borderColor: getPriorityColor(priority) }
+                      ]}
+                      onPress={() => setNewReminder({...newReminder, priority})}
+                    >
+                      <Text style={[
+                        styles.priorityButtonText,
+                        newReminder.priority === priority && { color: getPriorityColor(priority) }
+                      ]}>
+                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={handleAddReminder}
+              >
+                <Text style={styles.submitButtonText}>Add Reminder</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Options Modal */}
+      {selectedReminder && (
+        <Modal
+          visible={showOptionsModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowOptionsModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.optionsModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowOptionsModal(false)}
+          >
+            <View style={styles.optionsModal}>
+              <View style={styles.optionsModalHeader}>
+                <Text style={styles.optionsModalTitle}>
+                  {selectedReminder.title}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.optionsModalButton}
+                onPress={handleEditPress}
+              >
+                <Ionicons name="create-outline" size={24} color="#27374D" />
+                <Text style={styles.optionsModalButtonText}>Edit Reminder</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.optionsModalButton, styles.deleteButton]}
+                onPress={handleDeletePress}
+              >
+                <Ionicons name="trash-outline" size={24} color="#FF6B6B" />
+                <Text style={[styles.optionsModalButtonText, styles.deleteButtonText]}>
+                  Delete Reminder
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowOptionsModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Edit Reminder Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.addModalContent}>
+            <View style={styles.addModalHeader}>
+              <Text style={styles.addModalTitle}>Edit Reminder</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={28} color="#27374D" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Oil Change"
+                  value={editReminder.title}
+                  onChangeText={(text) => setEditReminder({...editReminder, title: text})}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Description *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Enter description"
+                  value={editReminder.description}
+                  onChangeText={(text) => setEditReminder({...editReminder, description: text})}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Due Date * (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="2026-01-15"
+                  value={editReminder.dueDate}
+                  onChangeText={(text) => setEditReminder({...editReminder, dueDate: text})}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Priority</Text>
+                <View style={styles.priorityButtons}>
+                  {["low", "medium", "high"].map((priority) => (
+                    <TouchableOpacity
+                      key={priority}
+                      style={[
+                        styles.priorityButton,
+                        editReminder.priority === priority && styles.priorityButtonActive,
+                        { borderColor: getPriorityColor(priority) }
+                      ]}
+                      onPress={() => setEditReminder({...editReminder, priority})}
+                    >
+                      <Text style={[
+                        styles.priorityButtonText,
+                        editReminder.priority === priority && { color: getPriorityColor(priority) }
+                      ]}>
+                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={handleUpdateReminder}
+              >
+                <Text style={styles.submitButtonText}>Update Reminder</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Profile Modal */}
       <Modal
         visible={showProfileModal}
@@ -208,7 +575,7 @@ export default function MaintenanceReminder() {
         onRequestClose={() => setShowProfileModal(false)}
       >
         <TouchableOpacity
-          style={styles.modalOverlay}
+          style={styles.profileModalOverlay}
           activeOpacity={1}
           onPress={() => setShowProfileModal(false)}
         >
@@ -354,6 +721,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
     paddingTop: 8,
+    paddingBottom: 80,
   },
   reminderCard: {
     backgroundColor: "#FFFFFF",
@@ -435,7 +803,101 @@ const styles = StyleSheet.create({
     color: "#9DB2BF",
     marginTop: 8,
   },
+  addButton: {
+    position: "absolute",
+    right: 20,
+    bottom: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#27374D",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+  },
   modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  addModalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: "85%",
+  },
+  addModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  addModalTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#27374D",
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#27374D",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 15,
+    color: "#27374D",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  priorityButtons: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  priorityButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  priorityButtonActive: {
+    backgroundColor: "#F5F5F5",
+  },
+  priorityButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#9DB2BF",
+  },
+  submitButton: {
+    backgroundColor: "#27374D",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  profileModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-start",
@@ -507,5 +969,63 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: "#FF6B6B",
+  },
+  optionsModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  optionsModal: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    width: "100%",
+    maxWidth: 320,
+  },
+  optionsModalHeader: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  optionsModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#27374D",
+    textAlign: "center",
+  },
+  optionsModalButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#F5F5F5",
+    marginBottom: 12,
+  },
+  optionsModalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#27374D",
+    marginLeft: 12,
+  },
+  deleteButton: {
+    backgroundColor: "#FFF5F5",
+  },
+  deleteButtonText: {
+    color: "#FF6B6B",
+  },
+  cancelButton: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#F5F5F5",
+    marginTop: 8,
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#9DB2BF",
   },
 });
