@@ -1,5 +1,6 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -86,7 +87,7 @@ function formatAIResponse(data) {
 /* =====================
    SIDEBAR COMPONENT
 ===================== */
-function Sidebar({ visible, onClose, user, signOut }) {
+function Sidebar({ visible, onClose, user, signOut, router }) {
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   useEffect(() => {
@@ -103,7 +104,7 @@ function Sidebar({ visible, onClose, user, signOut }) {
       icon: "build-outline",
       label: "Maintenance Tracking",
       onPress: () => {
-        console.log("Navigate to Maintenance Tracking");
+        router.push("MaintenanceTracking");
         onClose();
       },
     },
@@ -201,6 +202,7 @@ function Sidebar({ visible, onClose, user, signOut }) {
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const router = useRouter();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -386,6 +388,7 @@ export default function Chat() {
         onClose={() => setSidebarVisible(false)}
         user={user}
         signOut={signOut}
+        router={router}
       />
 
       <FlatList
