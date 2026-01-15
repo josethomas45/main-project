@@ -60,3 +60,13 @@ export async function deleteMaintenance(id, getToken) {
 
   if (!res.ok) throw new Error("Failed to delete maintenance");
 }
+
+export async function fetchMaintenanceRules() {
+  const res = await fetch(`${BACKEND_URL}/maintenance/rules`);
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch maintenance rules");
+  }
+
+  return res.json();
+}

@@ -2,6 +2,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { Picker } from "@react-native-picker/picker";
 import {
   Alert,
   FlatList,
@@ -17,16 +18,26 @@ import {
 import {
   fetchMaintenance,
   createMaintenance,
+  fetchMaintenanceRules,
 } from "../utils/maintenance";
 
-// DEV ONLY — remove when vehicle selector is implemented
+// DEV ONLY
 const DEV_VEHICLE_ID = "c6df84cb-90e9-4307-9f39-779dcaba9dd3";
+
+// helpers
+const todayISO = () => new Date().toISOString().split("T")[0];
+const toDDMMYYYY = (iso) => {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+};
 
 export default function MaintenanceTracking() {
   const router = useRouter();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
 
+  const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,14 +45,29 @@ export default function MaintenanceTracking() {
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [newReminder, setNewReminder] = useState({
-    title: "",
-    description: "",
-    dueDate: "",
+    service_type: "",
+    notes: "",
+    service_date: todayISO(),
+    odometer_km: "",
   });
+
+  const selectedRule = rules.find(
+    (r) => r.service_type === newReminder.service_type
+  );
 
   useEffect(() => {
     loadReminders();
+    loadRules();
   }, []);
+
+  const loadRules = async () => {
+    try {
+      const res = await fetchMaintenanceRules();
+      setRules(res.data || []);
+    } catch {
+      Alert.alert("Error", "Failed to load service types");
+    }
+  };
 
   const loadReminders = async () => {
     try {
@@ -55,8 +81,13 @@ export default function MaintenanceTracking() {
   };
 
   const handleAddReminder = async () => {
-    if (!newReminder.title || !newReminder.description || !newReminder.dueDate) {
-      Alert.alert("Error", "All fields are required");
+    if (!newReminder.service_type) {
+      Alert.alert("Error", "Select service type");
+      return;
+    }
+
+    if (selectedRule?.requires_odometer && !newReminder.odometer_km) {
+      Alert.alert("Error", "Odometer reading required");
       return;
     }
 
@@ -64,30 +95,28 @@ export default function MaintenanceTracking() {
       await createMaintenance(
         {
           vehicle_id: DEV_VEHICLE_ID,
-          service_type: newReminder.title,
-          service_date: newReminder.dueDate,
-          notes: newReminder.description,
+          service_type: newReminder.service_type,
+          service_date: newReminder.service_date,
+          odometer_km: newReminder.odometer_km
+            ? Number(newReminder.odometer_km)
+            : null,
+          notes: newReminder.notes,
         },
         getToken
       );
 
       setShowAddModal(false);
-      setNewReminder({ title: "", description: "", dueDate: "" });
+      setNewReminder({
+        service_type: "",
+        notes: "",
+        service_date: todayISO(),
+        odometer_km: "",
+      });
       await loadReminders();
       Alert.alert("Success", "Maintenance added");
     } catch {
       Alert.alert("Error", "Failed to add maintenance");
     }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "—";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
   };
 
   const renderReminder = ({ item }) => (
@@ -96,13 +125,13 @@ export default function MaintenanceTracking() {
         <Text style={styles.reminderTitle}>{item.service_type}</Text>
       </View>
 
-      <Text style={styles.reminderDescription}>{item.notes}</Text>
+      <Text style={styles.reminderDescription}>{item.notes || "—"}</Text>
 
       <View style={styles.reminderFooter}>
         <View style={styles.dueDateContainer}>
           <Ionicons name="calendar-outline" size={16} color="#526D82" />
           <Text style={styles.dueDate}>
-            {formatDate(item.service_date)}
+            {toDDMMYYYY(item.service_date)}
           </Text>
         </View>
       </View>
@@ -134,7 +163,6 @@ export default function MaintenanceTracking() {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       <FlatList
         data={reminders}
         keyExtractor={(item) => item.id}
@@ -154,7 +182,7 @@ export default function MaintenanceTracking() {
         }
       />
 
-      {/* Floating Add Button */}
+      {/* Add Button */}
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => setShowAddModal(true)}
@@ -174,42 +202,72 @@ export default function MaintenanceTracking() {
             </View>
 
             <ScrollView>
+              {/* SERVICE TYPE DROPDOWN */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Service Type</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newReminder.title}
-                  onChangeText={(t) =>
-                    setNewReminder({ ...newReminder, title: t })
-                  }
-                />
+                <View style={styles.input}>
+                  <Picker
+                    selectedValue={newReminder.service_type}
+                    onValueChange={(v) =>
+                      setNewReminder({ ...newReminder, service_type: v })
+                    }
+                  >
+                    <Picker.Item label="Select service type" value="" />
+                    {rules.map((r) => (
+                      <Picker.Item
+                        key={r.service_type}
+                        label={r.display_name}
+                        value={r.service_type}
+                      />
+                    ))}
+                  </Picker>
+                </View>
               </View>
 
+              {/* NOTES */}
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Notes</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   multiline
-                  value={newReminder.description}
+                  value={newReminder.notes}
                   onChangeText={(t) =>
-                    setNewReminder({ ...newReminder, description: t })
+                    setNewReminder({ ...newReminder, notes: t })
                   }
                 />
               </View>
 
+              {/* SERVICE DATE */}
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Service Date (YYYY-MM-DD)</Text>
+                <Text style={styles.label}>Service Date</Text>
                 <TextInput
                   style={styles.input}
-                  value={newReminder.dueDate}
-                  onChangeText={(t) =>
-                    setNewReminder({ ...newReminder, dueDate: t })
-                  }
+                  editable={false}
+                  value={toDDMMYYYY(newReminder.service_date)}
                 />
               </View>
 
+              {/* ODOMETER (CONDITIONAL) */}
+              {selectedRule?.requires_odometer && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Odometer (km)</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={newReminder.odometer_km}
+                    onChangeText={(t) =>
+                      setNewReminder({ ...newReminder, odometer_km: t })
+                    }
+                  />
+                </View>
+              )}
+
               <TouchableOpacity
-                style={styles.submitButton}
+                style={[
+                  styles.submitButton,
+                  !newReminder.service_type && { opacity: 0.6 },
+                ]}
+                disabled={!newReminder.service_type}
                 onPress={handleAddReminder}
               >
                 <Text style={styles.submitButtonText}>Save</Text>
@@ -250,7 +308,6 @@ export default function MaintenanceTracking() {
   );
 }
 
-/* 🔒 STYLES BELOW — UNCHANGED FROM YOUR ORIGINAL FILE */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
