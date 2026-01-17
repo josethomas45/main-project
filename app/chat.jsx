@@ -27,9 +27,7 @@ import { fetchWorkshops } from "../utils/workshops";
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 if (!BACKEND_URL) {
-  throw new Error(
-    "EXPO_PUBLIC_BACKEND_URL is missing. Check your .env file."
-  );
+  throw new Error("EXPO_PUBLIC_BACKEND_URL is missing. Check your .env file.");
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -158,10 +156,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
         />
 
         <Animated.View
-          style={[
-            styles.sidebar,
-            { transform: [{ translateX: slideAnim }] },
-          ]}
+          style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}
         >
           <View style={styles.sidebarHeader}>
             <View style={styles.userInfo}>
@@ -224,6 +219,11 @@ export default function Chat() {
   const { user } = useUser();
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      document.activeElement?.blur();
+    }
+  }, []);
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -273,8 +273,34 @@ export default function Chat() {
 
         const data = await res.json();
 
-        if (Array.isArray(data.messages)) {
-          setMessages(data.messages);
+        console.log("FULL chat response:", data);
+
+        if (Array.isArray(data)) {
+          const normalized = data.flatMap((row, index) => {
+            const items = [];
+
+            if (row.prompt) {
+              items.push({
+                id: `user-${index}`,
+                sender: "user",
+                text: row.prompt,
+                timestamp: timeNow(),
+              });
+            }
+
+            if (row.response_ai) {
+              items.push({
+                id: `ai-${index}`,
+                sender: "ai",
+                text: row.response_ai,
+                timestamp: timeNow(),
+              });
+            }
+
+            return items;
+          });
+
+          setMessages(normalized);
         }
       } catch (err) {
         console.error("Chat load error:", err);
@@ -388,9 +414,7 @@ export default function Chat() {
       <View
         style={[
           styles.messageContainer,
-          item.sender === "user"
-            ? styles.userContainer
-            : styles.aiContainer,
+          item.sender === "user" ? styles.userContainer : styles.aiContainer,
         ]}
       >
         <View
@@ -399,7 +423,9 @@ export default function Chat() {
             item.sender === "user" ? styles.userBubble : styles.aiBubble,
           ]}
         >
-          <Text style={item.sender === "user" ? styles.userText : styles.aiText}>
+          <Text
+            style={item.sender === "user" ? styles.userText : styles.aiText}
+          >
             {parts.map((p, i) =>
               p.startsWith("http") ? (
                 <Text
@@ -493,7 +519,13 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 4,
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700", flex: 1, textAlign: "center" },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    flex: 1,
+    textAlign: "center",
+  },
   headerSpacer: { width: 36 },
   messagesList: { padding: 16 },
   messageContainer: { marginBottom: 12 },
@@ -511,7 +543,7 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
   },
   input: { flex: 1, fontSize: 15, marginRight: 8 },
-  
+
   // Sidebar styles
   sidebarContainer: {
     flex: 1,
