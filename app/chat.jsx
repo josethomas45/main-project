@@ -113,7 +113,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "time-outline",
       label: "History",
       onPress: () => {
-        router.push("history");
+        router.push("HistoryPage");
         onClose();
       },
     },
