@@ -2,6 +2,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   Animated,
   Dimensions,
@@ -199,10 +200,13 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
 /* =====================
    COMPONENT
 ===================== */
+
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
   const router = useRouter();
+  const { chatId } = useLocalSearchParams();
+
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -225,6 +229,47 @@ export default function Chat() {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  /* =====================
+   LOAD EXISTING CHAT
+===================== */
+useEffect(() => {
+  if (!chatId) return;
+
+  const loadChat = async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      console.log("🚀 Loading chat:", chatId);
+
+      const res = await fetch(
+        `${BACKEND_URL}/chat/${chatId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        console.warn("Failed to load chat", chatId);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (Array.isArray(data.messages)) {
+        setMessages(data.messages);
+      }
+    } catch (err) {
+      console.error("Chat load error:", err);
+    }
+  };
+
+  loadChat();
+}, [chatId]);
+
 
   /* =====================
      BACKEND CALL
