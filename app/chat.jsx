@@ -95,7 +95,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
     Animated.timing(slideAnim, {
       toValue: visible ? 0 : -SIDEBAR_WIDTH,
       duration: 300,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web", // 🔧 FIX: native driver breaks on web
     }).start();
   }, [visible]);
 
@@ -105,6 +105,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "build-outline",
       label: "Maintenance Tracking",
       onPress: () => {
+        if (Platform.OS === "web") {
+          document.activeElement?.blur(); // 🔧 FIX
+        }
         router.push("MaintenanceTracking");
         onClose();
       },
@@ -114,6 +117,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "time-outline",
       label: "History",
       onPress: () => {
+        if (Platform.OS === "web") {
+          document.activeElement?.blur(); // 🔧 FIX
+        }
         router.push("HistoryPage");
         onClose();
       },
@@ -123,6 +129,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "person-outline",
       label: "Profile",
       onPress: () => {
+        if (Platform.OS === "web") {
+          document.activeElement?.blur(); // 🔧 FIX
+        }
         router.push("profile");
         onClose();
       },
@@ -140,8 +149,14 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
         <TouchableOpacity
           style={styles.overlay}
           activeOpacity={1}
-          onPress={onClose}
+          onPress={() => {
+            if (Platform.OS === "web") {
+              document.activeElement?.blur(); // 🔧 FIX
+            }
+            onClose();
+          }}
         />
+
         <Animated.View
           style={[
             styles.sidebar,
@@ -183,6 +198,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
             <TouchableOpacity
               style={styles.logoutButton}
               onPress={() => {
+                if (Platform.OS === "web") {
+                  document.activeElement?.blur(); // 🔧 FIX
+                }
                 signOut();
                 onClose();
               }}
@@ -207,7 +225,6 @@ export default function Chat() {
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
 
-
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
@@ -231,45 +248,41 @@ export default function Chat() {
   }, [messages]);
 
   /* =====================
-   LOAD EXISTING CHAT
-===================== */
-useEffect(() => {
-  if (!chatId) return;
+     LOAD EXISTING CHAT
+  ===================== */
+  useEffect(() => {
+    if (!chatId) return;
 
-  const loadChat = async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
+    const loadChat = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
 
-      console.log("🚀 Loading chat:", chatId);
+        console.log("🚀 Loading chat:", chatId);
 
-      const res = await fetch(
-        `${BACKEND_URL}/chat/${chatId}`,
-        {
+        const res = await fetch(`${BACKEND_URL}/chat/${chatId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+        });
+
+        if (!res.ok) {
+          console.warn("Failed to load chat", chatId);
+          return;
         }
-      );
 
-      if (!res.ok) {
-        console.warn("Failed to load chat", chatId);
-        return;
+        const data = await res.json();
+
+        if (Array.isArray(data.messages)) {
+          setMessages(data.messages);
+        }
+      } catch (err) {
+        console.error("Chat load error:", err);
       }
+    };
 
-      const data = await res.json();
-
-      if (Array.isArray(data.messages)) {
-        setMessages(data.messages);
-      }
-    } catch (err) {
-      console.error("Chat load error:", err);
-    }
-  };
-
-  loadChat();
-}, [chatId]);
-
+    loadChat();
+  }, [chatId]);
 
   /* =====================
      BACKEND CALL
@@ -314,7 +327,6 @@ useEffect(() => {
     try {
       const data = await callBackend(userText);
 
-      // AI response
       setMessages((prev) => [
         ...prev,
         {
@@ -325,7 +337,6 @@ useEffect(() => {
         },
       ]);
 
-      // Workshop intent
       if (/workshop|garage|mechanic|service center/i.test(userText)) {
         const location = await getDeviceLocation();
         const token = await getToken();
@@ -428,13 +439,16 @@ useEffect(() => {
         <View style={styles.headerSpacer} />
       </View>
 
-      <Sidebar
-        visible={sidebarVisible}
-        onClose={() => setSidebarVisible(false)}
-        user={user}
-        signOut={signOut}
-        router={router}
-      />
+      {/* 🔧 FIX: Unmount sidebar on web to avoid aria-hidden focus bug */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+        />
+      )}
 
       <FlatList
         ref={flatListRef}
