@@ -36,7 +36,7 @@ export default function ChatHistory() {
     try {
       setLoading(true);
 
-      const token = await getToken({ template: "supabase" });
+      const token = await getToken();
 
       const res = await fetch(`${BACKEND_URL}/chat/history`, {
         headers: {
