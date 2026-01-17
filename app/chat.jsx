@@ -2,6 +2,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   Animated,
   Dimensions,
@@ -26,9 +27,7 @@ import { fetchWorkshops } from "../utils/workshops";
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 if (!BACKEND_URL) {
-  throw new Error(
-    "EXPO_PUBLIC_BACKEND_URL is missing. Check your .env file."
-  );
+  throw new Error("EXPO_PUBLIC_BACKEND_URL is missing. Check your .env file.");
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -94,7 +93,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
     Animated.timing(slideAnim, {
       toValue: visible ? 0 : -SIDEBAR_WIDTH,
       duration: 300,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web", // 🔧 FIX: native driver breaks on web
     }).start();
   }, [visible]);
 
@@ -104,6 +103,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "build-outline",
       label: "Maintenance Tracking",
       onPress: () => {
+        if (Platform.OS === "web") {
+          document.activeElement?.blur(); // 🔧 FIX
+        }
         router.push("MaintenanceTracking");
         onClose();
       },
@@ -113,7 +115,10 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "time-outline",
       label: "History",
       onPress: () => {
-        router.push("history");
+        if (Platform.OS === "web") {
+          document.activeElement?.blur(); // 🔧 FIX
+        }
+        router.push("HistoryPage");
         onClose();
       },
     },
@@ -122,6 +127,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "person-outline",
       label: "Profile",
       onPress: () => {
+        if (Platform.OS === "web") {
+          document.activeElement?.blur(); // 🔧 FIX
+        }
         router.push("profile");
         onClose();
       },
@@ -139,13 +147,16 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
         <TouchableOpacity
           style={styles.overlay}
           activeOpacity={1}
-          onPress={onClose}
+          onPress={() => {
+            if (Platform.OS === "web") {
+              document.activeElement?.blur(); // 🔧 FIX
+            }
+            onClose();
+          }}
         />
+
         <Animated.View
-          style={[
-            styles.sidebar,
-            { transform: [{ translateX: slideAnim }] },
-          ]}
+          style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}
         >
           <View style={styles.sidebarHeader}>
             <View style={styles.userInfo}>
@@ -182,6 +193,9 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
             <TouchableOpacity
               style={styles.logoutButton}
               onPress={() => {
+                if (Platform.OS === "web") {
+                  document.activeElement?.blur(); // 🔧 FIX
+                }
                 signOut();
                 onClose();
               }}
@@ -199,10 +213,17 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
 /* =====================
    COMPONENT
 ===================== */
+
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
   const router = useRouter();
+  const { chatId } = useLocalSearchParams();
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      document.activeElement?.blur();
+    }
+  }, []);
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -225,6 +246,69 @@ export default function Chat() {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  /* =====================
+     LOAD EXISTING CHAT
+  ===================== */
+  useEffect(() => {
+    if (!chatId) return;
+
+    const loadChat = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        console.log("🚀 Loading chat:", chatId);
+
+        const res = await fetch(`${BACKEND_URL}/chat/${chatId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          console.warn("Failed to load chat", chatId);
+          return;
+        }
+
+        const data = await res.json();
+
+        console.log("FULL chat response:", data);
+
+        if (Array.isArray(data)) {
+          const normalized = data.flatMap((row, index) => {
+            const items = [];
+
+            if (row.prompt) {
+              items.push({
+                id: `user-${index}`,
+                sender: "user",
+                text: row.prompt,
+                timestamp: timeNow(),
+              });
+            }
+
+            if (row.response_ai) {
+              items.push({
+                id: `ai-${index}`,
+                sender: "ai",
+                text: row.response_ai,
+                timestamp: timeNow(),
+              });
+            }
+
+            return items;
+          });
+
+          setMessages(normalized);
+        }
+      } catch (err) {
+        console.error("Chat load error:", err);
+      }
+    };
+
+    loadChat();
+  }, [chatId]);
 
   /* =====================
      BACKEND CALL
@@ -269,7 +353,6 @@ export default function Chat() {
     try {
       const data = await callBackend(userText);
 
-      // AI response
       setMessages((prev) => [
         ...prev,
         {
@@ -280,7 +363,6 @@ export default function Chat() {
         },
       ]);
 
-      // Workshop intent
       if (/workshop|garage|mechanic|service center/i.test(userText)) {
         const location = await getDeviceLocation();
         const token = await getToken();
@@ -332,9 +414,7 @@ export default function Chat() {
       <View
         style={[
           styles.messageContainer,
-          item.sender === "user"
-            ? styles.userContainer
-            : styles.aiContainer,
+          item.sender === "user" ? styles.userContainer : styles.aiContainer,
         ]}
       >
         <View
@@ -343,7 +423,9 @@ export default function Chat() {
             item.sender === "user" ? styles.userBubble : styles.aiBubble,
           ]}
         >
-          <Text style={item.sender === "user" ? styles.userText : styles.aiText}>
+          <Text
+            style={item.sender === "user" ? styles.userText : styles.aiText}
+          >
             {parts.map((p, i) =>
               p.startsWith("http") ? (
                 <Text
@@ -383,13 +465,16 @@ export default function Chat() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <Sidebar
-        visible={sidebarVisible}
-        onClose={() => setSidebarVisible(false)}
-        user={user}
-        signOut={signOut}
-        router={router}
-      />
+      {/* 🔧 FIX: Unmount sidebar on web to avoid aria-hidden focus bug */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+        />
+      )}
 
       <FlatList
         ref={flatListRef}
@@ -434,7 +519,13 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 4,
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700", flex: 1, textAlign: "center" },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    flex: 1,
+    textAlign: "center",
+  },
   headerSpacer: { width: 36 },
   messagesList: { padding: 16 },
   messageContainer: { marginBottom: 12 },
@@ -452,7 +543,7 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
   },
   input: { flex: 1, fontSize: 15, marginRight: 8 },
-  
+
   // Sidebar styles
   sidebarContainer: {
     flex: 1,
