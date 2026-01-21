@@ -508,41 +508,125 @@ export default function Chat() {
    STYLES
 ===================== */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F7F8"
+  },
   header: {
     backgroundColor: "#27374D",
-    padding: 16,
+    paddingTop: Platform.OS === "android" ? 40 : 16, // Adjust for safe area
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 10,
   },
   menuButton: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   headerTitle: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     flex: 1,
     textAlign: "center",
+    letterSpacing: 0.5,
   },
-  headerSpacer: { width: 36 },
-  messagesList: { padding: 16 },
-  messageContainer: { marginBottom: 12 },
-  bubble: { padding: 14, borderRadius: 16, maxWidth: "80%" },
-  userBubble: { backgroundColor: "#27374D", alignSelf: "flex-end" },
-  aiBubble: { backgroundColor: "#9DB2BF", alignSelf: "flex-start" },
-  userText: { color: "#fff" },
-  aiText: { color: "#27374D" },
-  link: { color: "#1B4DFF", textDecorationLine: "underline" },
-  timestamp: { fontSize: 10, marginTop: 4, color: "#555" },
+  headerSpacer: { width: 44 },
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 100, // Space for input bar
+  },
+  messageContainer: {
+    marginBottom: 20,
+    width: "100%",
+  },
+  bubble: {
+    padding: 16,
+    borderRadius: 20,
+    maxWidth: "85%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  userBubble: {
+    backgroundColor: "#27374D",
+    alignSelf: "flex-end",
+    borderBottomRightRadius: 4,
+  },
+  aiBubble: {
+    backgroundColor: "#FFFFFF",
+    alignSelf: "flex-start",
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(157, 178, 191, 0.2)",
+  },
+  userText: {
+    color: "#fff",
+    fontSize: 16,
+    lineHeight: 22
+  },
+  aiText: {
+    color: "#27374D",
+    fontSize: 16,
+    lineHeight: 22
+  },
+  link: {
+    color: "#3498db",
+    textDecorationLine: "underline",
+    fontWeight: "600"
+  },
+  timestamp: {
+    fontSize: 11,
+    marginTop: 6,
+    color: "rgba(0, 0, 0, 0.4)", // Adaptive color based on bg? No, fixed for now.
+    alignSelf: "flex-end",
+    fontWeight: "500",
+  },
   inputBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
-    padding: 12,
-    borderTopWidth: 1,
-    borderColor: "#ddd",
+    alignItems: "flex-end",
+    padding: 16,
+    backgroundColor: "transparent", // Let the blur/gradient show if we had one, or just transparent over bg
   },
-  input: { flex: 1, fontSize: 15, marginRight: 8 },
+  // To make the input bar look like a floating glass/card
+  input: {
+    flex: 1,
+    fontSize: 16,
+    maxHeight: 100,
+    color: "#27374D",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12, // Align multiline text
+    paddingBottom: 12,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#DDE6ED",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sendButton: { // New style for send button container if needed, but we used TouchableOpacity direct
+    // Handled inline or wrap it if needed.
+  },
 
   // Sidebar styles
   sidebarContainer: {
@@ -551,7 +635,8 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(39, 55, 77, 0.6)", // Darker, tinted overlay
+    backdropFilter: "blur(4px)", // Works on web
   },
   sidebar: {
     position: "absolute",
@@ -559,77 +644,85 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SIDEBAR_WIDTH,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     shadowColor: "#000",
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 10,
   },
   sidebarHeader: {
     backgroundColor: "#27374D",
-    padding: 20,
-    paddingTop: 50,
+    padding: 24,
+    paddingTop: 60,
+    borderBottomRightRadius: 30,
   },
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#9DB2BF",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#DDE6ED",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: "#526D82",
   },
   avatarText: {
     color: "#27374D",
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "800",
   },
   userName: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
     marginBottom: 4,
   },
   userEmail: {
     color: "#9DB2BF",
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: "500",
   },
   menuItems: {
     flex: 1,
-    paddingTop: 20,
+    paddingTop: 30,
+    paddingHorizontal: 16,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    paddingLeft: 24,
+    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: "#F5F7F8",
   },
   menuLabel: {
     fontSize: 16,
     color: "#27374D",
     marginLeft: 16,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   sidebarFooter: {
+    padding: 24,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
-    padding: 16,
+    borderTopColor: "#F1F5F9",
   },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    paddingLeft: 8,
+    padding: 16,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
   },
   logoutText: {
     fontSize: 16,
-    color: "#E74C3C",
+    color: "#EF4444",
     marginLeft: 16,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 });
