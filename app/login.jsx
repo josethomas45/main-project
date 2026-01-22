@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, { FadeInDown, FadeInUp, FadeIn } from "react-native-reanimated";
 
 // Required for OAuth to work properly
 WebBrowser.maybeCompleteAuthSession();
@@ -52,16 +53,22 @@ export default function Login() {
   return (
     <View style={styles.container}>
       {/* Header Section */}
-      <View style={styles.header}>
+      <Animated.View
+        entering={FadeInDown.delay(200).duration(1000).springify()}
+        style={styles.header}
+      >
         <View style={styles.iconContainer}>
           <Ionicons name="chatbubbles" size={48} color="#FFFFFF" />
         </View>
         <Text style={styles.title}>AutoVitals</Text>
         <Text style={styles.subtitle}>Your AI Companion</Text>
-      </View>
+      </Animated.View>
 
       {/* Main Content */}
-      <View style={styles.content}>
+      <Animated.View
+        entering={FadeInUp.delay(400).duration(1000).springify()}
+        style={styles.content}
+      >
         <View style={styles.welcomeBox}>
           <Text style={styles.welcomeTitle}>Welcome Back!</Text>
           <Text style={styles.welcomeText}>
@@ -70,47 +77,57 @@ export default function Login() {
         </View>
 
         {/* Google Sign In Button */}
-        <TouchableOpacity
-          style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
-          onPress={handleGoogleSignIn}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          <View style={styles.googleIconWrapper}>
-            <Ionicons name="logo-google" size={22} color="#27374D" />
-          </View>
-          <Text style={styles.googleText}>
-            {loading ? "Signing in..." : "Continue with Google"}
-          </Text>
-        </TouchableOpacity>
+        <Animated.View entering={FadeInDown.delay(600).duration(1000).springify()}>
+          <TouchableOpacity
+            style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <View style={styles.googleIconWrapper}>
+              <Ionicons name="logo-google" size={22} color="#27374D" />
+            </View>
+            <Text style={styles.googleText}>
+              {loading ? "Signing in..." : "Continue with Google"}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* Divider */}
-        <View style={styles.divider}>
+        <Animated.View
+          entering={FadeIn.delay(800).duration(1000)}
+          style={styles.divider}
+        >
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>OR</Text>
           <View style={styles.dividerLine} />
-        </View>
+        </Animated.View>
 
         {/* Alternative Options */}
-        <TouchableOpacity style={styles.emailBtn} activeOpacity={0.8}>
-          <Ionicons name="mail-outline" size={20} color="#526D82" />
-          <Text style={styles.emailText}>Sign in with Email</Text>
-        </TouchableOpacity>
-      </View>
+        <Animated.View entering={FadeInDown.delay(1000).duration(1000).springify()}>
+          <TouchableOpacity style={styles.emailBtn} activeOpacity={0.8}>
+            <Ionicons name="mail-outline" size={20} color="#526D82" />
+            <Text style={styles.emailText}>Sign in with Email</Text>
+          </TouchableOpacity>
+        </Animated.View>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Don't have an account?{" "}
-          <Link href="/signup" style={styles.signupLink}>
-            Sign up
-          </Link>
-        </Text>
+        {/* Footer */}
+        <Animated.View
+          entering={FadeIn.delay(1200).duration(1000)}
+          style={styles.footer}
+        >
+          <Text style={styles.footerText}>
+            Don't have an account?{" "}
+            <Link href="/signup" style={styles.signupLink}>
+              Sign up
+            </Link>
+          </Text>
 
-        <Text style={styles.termsText}>
-          By continuing, you agree to our Terms & Privacy Policy
-        </Text>
-      </View>
+          <Text style={styles.termsText}>
+            By continuing, you agree to our Terms & Privacy Policy
+          </Text>
+        </Animated.View>
+      </Animated.View>
     </View>
   );
 }
