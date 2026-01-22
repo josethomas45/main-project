@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Reanimated, { FadeInUp, FadeInRight, FadeInLeft } from "react-native-reanimated";
 
 import { getDeviceLocation } from "../utils/location";
 import { fetchWorkshops } from "../utils/workshops";
@@ -411,7 +412,8 @@ export default function Chat() {
     const parts = item.text.split(/(https?:\/\/[^\s]+)/g);
 
     return (
-      <View
+      <Reanimated.View
+        entering={item.sender === "user" ? FadeInRight.duration(400) : FadeInLeft.duration(400)}
         style={[
           styles.messageContainer,
           item.sender === "user" ? styles.userContainer : styles.aiContainer,
@@ -442,7 +444,7 @@ export default function Chat() {
           </Text>
           <Text style={styles.timestamp}>{item.timestamp}</Text>
         </View>
-      </View>
+      </Reanimated.View>
     );
   };
 
@@ -462,7 +464,17 @@ export default function Chat() {
           <Ionicons name="menu" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>AutoVitals</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          onPress={() => {
+            if (Platform.OS === "web") {
+              document.activeElement?.blur();
+            }
+            signOut();
+          }}
+          style={styles.logoutHeaderButton}
+        >
+          <Ionicons name="log-out-outline" size={24} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       {/* 🔧 FIX: Unmount sidebar on web to avoid aria-hidden focus bug */}
@@ -484,7 +496,10 @@ export default function Chat() {
         contentContainerStyle={styles.messagesList}
       />
 
-      <View style={styles.inputBar}>
+      <Reanimated.View
+        entering={FadeInUp.delay(500).duration(800)}
+        style={styles.inputBar}
+      >
         <TextInput
           style={styles.input}
           value={message}
@@ -499,7 +514,7 @@ export default function Chat() {
             color="#27374D"
           />
         </TouchableOpacity>
-      </View>
+      </Reanimated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -540,7 +555,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: 0.5,
   },
-  headerSpacer: { width: 44 },
+  logoutHeaderButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
   messagesList: {
     paddingHorizontal: 16,
     paddingTop: 20,

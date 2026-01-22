@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, { FadeInDown, FadeInUp, FadeIn } from "react-native-reanimated";
 
 // Required for OAuth to work properly
 WebBrowser.maybeCompleteAuthSession();
@@ -52,16 +53,22 @@ export default function SignUp() {
   return (
     <View style={styles.container}>
       {/* Header Section */}
-      <View style={styles.header}>
+      <Animated.View
+        entering={FadeInDown.delay(200).duration(1000).springify()}
+        style={styles.header}
+      >
         <View style={styles.iconContainer}>
           <Ionicons name="person-add" size={48} color="#FFFFFF" />
         </View>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Join Vasu The Mech today</Text>
-      </View>
+      </Animated.View>
 
       {/* Main Content */}
-      <View style={styles.content}>
+      <Animated.View
+        entering={FadeInUp.delay(400).duration(1000).springify()}
+        style={styles.content}
+      >
         <View style={styles.welcomeBox}>
           <Text style={styles.welcomeTitle}>Get Started!</Text>
           <Text style={styles.welcomeText}>
@@ -70,52 +77,71 @@ export default function SignUp() {
         </View>
 
         {/* Google Sign Up Button */}
-        <TouchableOpacity
-          style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
-          onPress={handleGoogleSignUp}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          <View style={styles.googleIconWrapper}>
-            <Ionicons name="logo-google" size={22} color="#27374D" />
-          </View>
-          <Text style={styles.googleText}>
-            {loading ? "Creating account..." : "Sign up with Google"}
-          </Text>
-        </TouchableOpacity>
+        <Animated.View entering={FadeInDown.delay(600).duration(1000).springify()}>
+          <TouchableOpacity
+            style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+            onPress={handleGoogleSignUp}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <View style={styles.googleIconWrapper}>
+              <Ionicons name="logo-google" size={22} color="#27374D" />
+            </View>
+            <Text style={styles.googleText}>
+              {loading ? "Creating account..." : "Sign up with Google"}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* Divider */}
-        <View style={styles.divider}>
+        <Animated.View
+          entering={FadeIn.delay(800).duration(1000)}
+          style={styles.divider}
+        >
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>OR</Text>
           <View style={styles.dividerLine} />
-        </View>
+        </Animated.View>
 
         {/* Alternative Options */}
-        <TouchableOpacity style={styles.emailBtn} activeOpacity={0.8}>
-          <Ionicons name="mail-outline" size={20} color="#526D82" />
-          <Text style={styles.emailText}>Sign up with Email</Text>
-        </TouchableOpacity>
+        <Animated.View entering={FadeInDown.delay(1000).duration(1000).springify()}>
+          <TouchableOpacity style={styles.emailBtn} activeOpacity={0.8}>
+            <Ionicons name="mail-outline" size={20} color="#526D82" />
+            <Text style={styles.emailText}>Sign up with Email</Text>
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* Features List */}
         <View style={styles.featuresContainer}>
-          <View style={styles.featureItem}>
+          <Animated.View
+            entering={FadeInDown.delay(1200).duration(800).springify()}
+            style={styles.featureItem}
+          >
             <Ionicons name="checkmark-circle" size={20} color="#526D82" />
             <Text style={styles.featureText}>Free to use</Text>
-          </View>
-          <View style={styles.featureItem}>
+          </Animated.View>
+          <Animated.View
+            entering={FadeInDown.delay(1400).duration(800).springify()}
+            style={styles.featureItem}
+          >
             <Ionicons name="checkmark-circle" size={20} color="#526D82" />
             <Text style={styles.featureText}>AI-powered responses</Text>
-          </View>
-          <View style={styles.featureItem}>
+          </Animated.View>
+          <Animated.View
+            entering={FadeInDown.delay(1600).duration(800).springify()}
+            style={styles.featureItem}
+          >
             <Ionicons name="checkmark-circle" size={20} color="#526D82" />
             <Text style={styles.featureText}>Secure & private</Text>
-          </View>
+          </Animated.View>
         </View>
-      </View>
+      </Animated.View>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <Animated.View
+        entering={FadeIn.delay(1800).duration(1000)}
+        style={styles.footer}
+      >
         <Text style={styles.footerText}>
           Already have an account?{" "}
           <Link href="/login" style={styles.loginLink}>
@@ -126,7 +152,7 @@ export default function SignUp() {
         <Text style={styles.termsText}>
           By signing up, you agree to our Terms & Privacy Policy
         </Text>
-      </View>
+      </Animated.View>
     </View>
   );
 }
