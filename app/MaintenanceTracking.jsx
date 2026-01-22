@@ -189,36 +189,36 @@ export default function MaintenanceTracking() {
 
   // 🗑️ DELETE
   // 🗑️ DELETE (FIXED)
-const handleDeleteReminder = (id) => {
-  Alert.alert(
-    "Delete Maintenance",
-    "Are you sure you want to delete this record?",
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          console.log("DELETE CLICKED:", id);
+  const handleDeleteReminder = (id) => {
+    Alert.alert(
+      "Delete Maintenance",
+      "Are you sure you want to delete this record?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            console.log("DELETE CLICKED:", id);
 
-          try {
-            await deleteMaintenance(id, getToken);
+            try {
+              await deleteMaintenance(id, getToken);
 
-            // ✅ OPTIMISTIC UI UPDATE
-            setReminders((prev) =>
-              prev.filter((item) => item.id !== id)
-            );
+              // ✅ OPTIMISTIC UI UPDATE
+              setReminders((prev) =>
+                prev.filter((item) => item.id !== id)
+              );
 
-            Alert.alert("Deleted", "Maintenance record deleted");
-          } catch (err) {
-            console.error("Delete failed:", err);
-            Alert.alert("Error", "Failed to delete maintenance");
-          }
+              Alert.alert("Deleted", "Maintenance record deleted");
+            } catch (err) {
+              console.error("Delete failed:", err);
+              Alert.alert("Error", "Failed to delete maintenance");
+            }
+          },
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
 
   const renderReminder = ({ item }) => (
@@ -244,7 +244,7 @@ const handleDeleteReminder = (id) => {
             activeOpacity={0.6}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={{ zIndex: 20 }}
-            >
+          >
             <Ionicons
               name="trash-outline"
               size={20}
@@ -276,7 +276,6 @@ const handleDeleteReminder = (id) => {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Ionicons name="alarm-outline" size={24} color="#FFFFFF" />
           <Text style={styles.headerTitle}>Maintenance</Text>
         </View>
 
@@ -292,13 +291,15 @@ const handleDeleteReminder = (id) => {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={reminders}
-        keyExtractor={(item) => item.id}
-        renderItem={renderReminder}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+      <View style={styles.content}>
+        <FlatList
+          data={reminders}
+          keyExtractor={(item) => item.id}
+          renderItem={renderReminder}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
 
       {/* Add Button */}
       <TouchableOpacity
@@ -447,147 +448,107 @@ const handleDeleteReminder = (id) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#27374D",
   },
   header: {
-    backgroundColor: "#27374D",
-    paddingTop: 50,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 30,
+    paddingHorizontal: 24,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  backBtn: {
-    padding: 4,
   },
   headerCenter: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 16,
+  },
+  backBtn: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700",
-    marginLeft: 8,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   profileBtn: {
     padding: 4,
   },
   profileAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#526D82",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.2)",
   },
   profileAvatarText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
   },
   content: {
     flex: 1,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    padding: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#27374D",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#9DB2BF",
-    fontWeight: "600",
+    backgroundColor: "#F1F5F9",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: "hidden",
   },
   listContent: {
-    padding: 16,
-    paddingTop: 8,
-    paddingBottom: 80,
+    padding: 20,
+    paddingTop: 24,
+    paddingBottom: 100,
   },
   reminderCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#27374D",
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "rgba(157, 178, 191, 0.1)",
   },
   reminderHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
-  },
-  reminderTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  priorityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    marginBottom: 12,
   },
   reminderTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     color: "#27374D",
     flex: 1,
   },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
   reminderDescription: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#526D82",
-    marginBottom: 12,
-    lineHeight: 20,
+    marginBottom: 16,
+    lineHeight: 22,
   },
   reminderFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
   },
   dueDateContainer: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   dueDate: {
     fontSize: 13,
@@ -595,245 +556,131 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontWeight: "600",
   },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#27374D",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#9DB2BF",
-    marginTop: 8,
-  },
   addButton: {
     position: "absolute",
-    right: 20,
-    bottom: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    right: 24,
+    bottom: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "#27374D",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowColor: "#27374D",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
     elevation: 8,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(39, 55, 77, 0.6)", // Darker, tinted overlay
     justifyContent: "flex-end",
   },
   addModalContent: {
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 32,
+    paddingTop: 24,
     maxHeight: "85%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
   },
   addModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 32,
   },
   addModalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "800",
     color: "#27374D",
   },
   formGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#27374D",
-    marginBottom: 8,
+    fontWeight: "700",
+    color: "#526D82",
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 15,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
     color: "#27374D",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
+    borderColor: "#E2E8F0",
   },
   textArea: {
-    height: 80,
+    height: 100,
     textAlignVertical: "top",
-  },
-  priorityButtons: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  priorityButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#E0E0E0",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-  },
-  priorityButtonActive: {
-    backgroundColor: "#F5F5F5",
-  },
-  priorityButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#9DB2BF",
   },
   submitButton: {
     backgroundColor: "#27374D",
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 20,
+    borderRadius: 16,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 16,
+    marginBottom: 40,
+    shadowColor: "#27374D",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  profileModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    paddingTop: 90,
-    paddingRight: 20,
-  },
-  profileModal: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    width: 280,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  profileModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  profileModalAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#27374D",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  profileModalAvatarText: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "700",
   },
-  profileModalInfo: {
+  profileModalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+    paddingTop: 100,
+    paddingRight: 24,
+  },
+  profileModal: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 24,
+    width: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
   },
   profileModalName: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "700",
     color: "#27374D",
-    marginBottom: 4,
-  },
-  profileModalEmail: {
-    fontSize: 13,
-    color: "#9DB2BF",
-  },
-  profileModalDivider: {
-    height: 1,
-    backgroundColor: "#F0F0F0",
-    marginVertical: 12,
+    marginBottom: 20,
   },
   profileModalOption: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
+    borderRadius: 12,
   },
   profileModalOptionText: {
-    fontSize: 15,
+    fontSize: 16,
     color: "#27374D",
-    marginLeft: 12,
+    marginLeft: 16,
     fontWeight: "600",
-  },
-  logoutOption: {
-    marginTop: 4,
   },
   logoutText: {
     color: "#FF6B6B",
-  },
-  optionsModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  optionsModal: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    maxWidth: 320,
-  },
-  optionsModalHeader: {
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  optionsModalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#27374D",
-    textAlign: "center",
-  },
-  optionsModalButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#F5F5F5",
-    marginBottom: 12,
-  },
-  optionsModalButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#27374D",
-    marginLeft: 12,
-  },
-  deleteButton: {
-    backgroundColor: "#FFF5F5",
-  },
-  deleteButtonText: {
-    color: "#FF6B6B",
-  },
-  cancelButton: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#F5F5F5",
-    marginTop: 8,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#9DB2BF",
   },
 });

@@ -183,32 +183,43 @@ export default function ChatHistory() {
         </TouchableOpacity>
       </View>
 
-      {/* SEARCH */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color="#9DB2BF" />
-        <TextInput
-          placeholder="Search conversations..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-        />
-      </View>
+      <View style={styles.content}>
+        {/* SEARCH */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color="#9DB2BF" />
+            <TextInput
+              placeholder="Search conversations..."
+              placeholderTextColor="#9DB2BF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
+            />
+          </View>
+        </View>
 
-      {/* LIST */}
-      {loading ? (
-        <ActivityIndicator size="large" style={{ marginTop: 40 }} />
-      ) : (
-        <FlatList
-          data={getFilteredChats()}
-          keyExtractor={(item) => item.id}
-          renderItem={renderChatItem}
-          ListEmptyComponent={
-            <Text style={{ textAlign: "center", marginTop: 40 }}>
-              No chat history
-            </Text>
-          }
-        />
-      )}
+        {/* LIST */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#27374D" style={{ marginTop: 40 }} />
+        ) : (
+          <FlatList
+            data={getFilteredChats()}
+            keyExtractor={(item) => item.id}
+            renderItem={renderChatItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="chatbubbles-outline" size={48} color="#9DB2BF" />
+                <Text style={styles.emptyText}>No conversation history</Text>
+                <Text style={styles.emptySubtext}>
+                  Start a new chat to see it here
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </View>
 
       {/* PROFILE MODAL */}
       <Modal transparent visible={showProfileModal} animationType="fade">
@@ -305,153 +316,97 @@ export default function ChatHistory() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#27374D",
   },
   header: {
-    backgroundColor: "#27374D",
-    paddingTop: 50,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 30,
+    paddingHorizontal: 24,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  backBtn: {
-    padding: 4,
-  },
-  headerCenter: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 16,
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700",
-    marginLeft: 8,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
-  profileBtn: {
-    padding: 4,
-  },
-  profileAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#526D82",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  profileAvatarText: {
+  avatarText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
   },
+  content: {
+    flex: 1,
+    backgroundColor: "#F1F5F9",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: "hidden",
+  },
   searchContainer: {
-    padding: 16,
+    padding: 20,
+    paddingBottom: 10,
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: "#27374D",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
+    marginLeft: 12,
+    fontSize: 16,
     color: "#27374D",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#27374D",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#9DB2BF",
-    fontWeight: "600",
-  },
-  actionsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  deleteAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF5F5",
-    padding: 12,
-    borderRadius: 10,
-    gap: 8,
-  },
-  deleteAllText: {
-    color: "#FF6B6B",
-    fontSize: 14,
-    fontWeight: "600",
   },
   listContent: {
-    padding: 16,
-    paddingTop: 8,
+    padding: 20,
+    paddingTop: 10,
+    paddingBottom: 40,
   },
   chatCard: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  chatContent: {
-    flex: 1,
-    flexDirection: "row",
+    borderRadius: 20,
+    marginBottom: 16,
     padding: 16,
-  },
-  chatIconContainer: {
-    marginRight: 12,
+    shadowColor: "#27374D",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "rgba(157, 178, 191, 0.1)",
+    alignItems: "center",
   },
   chatIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#E8F0FE",
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 16,
   },
   chatDetails: {
     flex: 1,
@@ -459,15 +414,14 @@ const styles = StyleSheet.create({
   chatHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 6,
   },
   chatTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#27374D",
-    flex: 1,
-    marginRight: 8,
+    maxWidth: "70%",
   },
   chatTime: {
     fontSize: 12,
@@ -477,36 +431,28 @@ const styles = StyleSheet.create({
   chatPreview: {
     fontSize: 14,
     color: "#526D82",
-    marginBottom: 8,
+    marginBottom: 10,
+    lineHeight: 20,
   },
   chatFooter: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-  },
-  messageCount: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
   },
   messageCountText: {
+    marginLeft: 6,
     fontSize: 12,
     color: "#9DB2BF",
     fontWeight: "600",
   },
-  deleteBtn: {
-    padding: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
+    paddingVertical: 80,
+    opacity: 0.8,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#27374D",
     marginTop: 16,
   },
@@ -516,137 +462,34 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
   },
-  deleteModalOverlay: {
+  // Modals use same style as Maintenance
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+    backgroundColor: "rgba(39, 55, 77, 0.6)",
+    justifyContent: "flex-end",
   },
-  deleteModal: {
+  modal: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
-    maxWidth: 340,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 32,
     alignItems: "center",
   },
-  deleteModalIcon: {
-    marginBottom: 16,
-  },
-  deleteModalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#27374D",
-    marginBottom: 8,
-  },
-  deleteModalMessage: {
-    fontSize: 14,
-    color: "#526D82",
-    textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  deleteModalButtons: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
-  cancelBtn: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#F5F5F5",
-    alignItems: "center",
-  },
-  cancelBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#27374D",
-  },
-  confirmDeleteBtn: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#FF6B6B",
-    alignItems: "center",
-  },
-  confirmDeleteBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  profileModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    paddingTop: 90,
-    paddingRight: 20,
-  },
-  profileModal: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    width: 280,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  profileModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  profileModalAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#27374D",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  profileModalAvatarText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  profileModalInfo: {
-    flex: 1,
-  },
-  profileModalName: {
-    fontSize: 16,
-    fontWeight: "700",
+  modalName: {
+    fontSize: 22,
+    fontWeight: "800",
     color: "#27374D",
     marginBottom: 4,
   },
-  profileModalEmail: {
-    fontSize: 13,
-    color: "#9DB2BF",
+  modalEmail: {
+    fontSize: 14,
+    color: "#526D82",
+    marginBottom: 32,
   },
-  profileModalDivider: {
-    height: 1,
-    backgroundColor: "#F0F0F0",
-    marginVertical: 12,
-  },
-  profileModalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  profileModalOptionText: {
-    fontSize: 15,
-    color: "#27374D",
-    marginLeft: 12,
-    fontWeight: "600",
-  },
-  logoutOption: {
-    marginTop: 4,
-  },
-  logoutText: {
+  logout: {
     color: "#FF6B6B",
+    fontSize: 18,
+    fontWeight: "700",
+    padding: 10,
   },
 });
