@@ -1,23 +1,31 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
 import {
-  Animated,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
+  Animated as RNAnimated,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import Reanimated, { FadeInUp, FadeInRight, FadeInLeft } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  FadeInLeft,
+  FadeInRight,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring
+} from "react-native-reanimated";
 
 import { getDeviceLocation } from "../utils/location";
 import { fetchWorkshops } from "../utils/workshops";
@@ -32,7 +40,7 @@ if (!BACKEND_URL) {
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
+const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.8;
 
 /* =====================
    HELPERS
@@ -51,11 +59,11 @@ function formatAIResponse(data) {
   let text = "";
 
   if (data.diagnosis) {
-    text += ` Diagnosis:\n${data.diagnosis}\n\n`;
+    text += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
   }
 
   if (data.explanation) {
-    text += ` Explanation:\n${data.explanation}\n\n`;
+    text += `💡 Explanation:\n${data.explanation}\n\n`;
   }
 
   if (Array.isArray(data.steps) && data.steps.length > 0) {
@@ -70,7 +78,7 @@ function formatAIResponse(data) {
     Array.isArray(data.follow_up_questions) &&
     data.follow_up_questions.length > 0
   ) {
-    text += " Follow-up Questions:\n";
+    text += "❓ Follow-up Questions:\n";
     data.follow_up_questions.forEach((q, i) => {
       text += `${i + 1}. ${q}\n`;
     });
@@ -85,16 +93,16 @@ function formatAIResponse(data) {
 }
 
 /* =====================
-   SIDEBAR COMPONENT
+   SIDEBAR COMPONENT (GLASS)
 ===================== */
 function Sidebar({ visible, onClose, user, signOut, router }) {
-  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+  const slideAnim = useRef(new RNAnimated.Value(-SIDEBAR_WIDTH)).current;
 
   useEffect(() => {
-    Animated.timing(slideAnim, {
+    RNAnimated.timing(slideAnim, {
       toValue: visible ? 0 : -SIDEBAR_WIDTH,
-      duration: 300,
-      useNativeDriver: Platform.OS !== "web", // 🔧 FIX: native driver breaks on web
+      duration: 350,
+      useNativeDriver: true,
     }).start();
   }, [visible]);
 
@@ -104,9 +112,6 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "build-outline",
       label: "Maintenance Tracking",
       onPress: () => {
-        if (Platform.OS === "web") {
-          document.activeElement?.blur(); // 🔧 FIX
-        }
         router.push("MaintenanceTracking");
         onClose();
       },
@@ -116,9 +121,6 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "time-outline",
       label: "History",
       onPress: () => {
-        if (Platform.OS === "web") {
-          document.activeElement?.blur(); // 🔧 FIX
-        }
         router.push("HistoryPage");
         onClose();
       },
@@ -128,9 +130,6 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       icon: "person-outline",
       label: "Profile",
       onPress: () => {
-        if (Platform.OS === "web") {
-          document.activeElement?.blur(); // 🔧 FIX
-        }
         router.push("profile");
         onClose();
       },
@@ -145,93 +144,96 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       onRequestClose={onClose}
     >
       <View style={styles.sidebarContainer}>
+        {/* Backdrop */}
         <TouchableOpacity
-          style={styles.overlay}
+          style={styles.sidebarBackdrop}
           activeOpacity={1}
-          onPress={() => {
-            if (Platform.OS === "web") {
-              document.activeElement?.blur(); // 🔧 FIX
-            }
-            onClose();
-          }}
+          onPress={onClose}
         />
 
-        <Animated.View
-          style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}
+        {/* Glass Sidebar */}
+        <RNAnimated.View
+          style={[
+            styles.sidebar,
+            { transform: [{ translateX: slideAnim }] },
+          ]}
         >
+          {/* Header with gradient avatar */}
           <View style={styles.sidebarHeader}>
-            <View style={styles.userInfo}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {user?.firstName?.[0] || "U"}
+            <LinearGradient
+              colors={["#6366f1", "#8b5cf6"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.sidebarAvatarRing}
+            >
+              <View style={styles.sidebarAvatar}>
+                <Text style={styles.sidebarAvatarText}>
+                  {user?.firstName?.[0]?.toUpperCase() || "U"}
                 </Text>
               </View>
-              <View>
-                <Text style={styles.userName}>
-                  {user?.firstName || "User"} {user?.lastName || ""}
-                </Text>
-                <Text style={styles.userEmail}>
-                  {user?.primaryEmailAddress?.emailAddress || ""}
-                </Text>
-              </View>
-            </View>
+            </LinearGradient>
+
+            <Text style={styles.sidebarUserName}>
+              {user?.firstName || "User"} {user?.lastName || ""}
+            </Text>
+            <Text style={styles.sidebarUserEmail}>
+              {user?.primaryEmailAddress?.emailAddress || ""}
+            </Text>
           </View>
 
+          {/* Menu Items */}
           <View style={styles.menuItems}>
             {menuItems.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.menuItem}
                 onPress={item.onPress}
+                activeOpacity={0.7}
               >
-                <Ionicons name={item.icon} size={22} color="#27374D" />
+                <View style={styles.menuIconContainer}>
+                  <Ionicons name={item.icon} size={22} color="#a5b4fc" />
+                </View>
                 <Text style={styles.menuLabel}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#64748b" />
               </TouchableOpacity>
             ))}
           </View>
 
+          {/* Logout */}
           <View style={styles.sidebarFooter}>
             <TouchableOpacity
               style={styles.logoutButton}
               onPress={() => {
-                if (Platform.OS === "web") {
-                  document.activeElement?.blur(); // 🔧 FIX
-                }
                 signOut();
                 onClose();
               }}
+              activeOpacity={0.7}
             >
-              <Ionicons name="log-out-outline" size={22} color="#E74C3C" />
-              <Text style={styles.logoutText}>Logout</Text>
+              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+              <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </RNAnimated.View>
       </View>
     </Modal>
   );
 }
 
 /* =====================
-   COMPONENT
+   MAIN COMPONENT
 ===================== */
-
 export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
-  useEffect(() => {
-    if (Platform.OS === "web") {
-      document.activeElement?.blur();
-    }
-  }, []);
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
       id: "welcome",
       sender: "ai",
-      text: `Hi ${user?.firstName || "there"} , How can I help you today?`,
+      text: `Hi ${user?.firstName || "there"} — how can I help with your vehicle today?`,
       timestamp: timeNow(),
     },
   ]);
@@ -259,22 +261,12 @@ export default function Chat() {
         const token = await getToken();
         if (!token) return;
 
-        console.log("🚀 Loading chat:", chatId);
-
         const res = await fetch(`${BACKEND_URL}/chat/${chatId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (!res.ok) {
-          console.warn("Failed to load chat", chatId);
-          return;
-        }
-
+        if (!res.ok) return;
         const data = await res.json();
-
-        console.log("FULL chat response:", data);
 
         if (Array.isArray(data)) {
           const normalized = data.flatMap((row, index) => {
@@ -405,46 +397,85 @@ export default function Chat() {
     }
   };
 
+  // Press animation for send button
+  const scale = useSharedValue(1);
+  const animatedSendButton = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handleSendPress = () => {
+    scale.value = withSpring(0.9, { damping: 10 });
+    setTimeout(() => {
+      scale.value = withSpring(1);
+    }, 100);
+    sendMessage();
+  };
+
   /* =====================
      RENDER MESSAGE
   ===================== */
-  const renderMessage = ({ item }) => {
+  const renderMessage = ({ item, index }) => {
     const parts = item.text.split(/(https?:\/\/[^\s]+)/g);
 
     return (
-      <Reanimated.View
-        entering={item.sender === "user" ? FadeInRight.duration(400) : FadeInLeft.duration(400)}
+      <Animated.View
+        entering={
+          item.sender === "user"
+            ? FadeInRight.duration(500).delay(50)
+            : FadeInLeft.duration(500).delay(50)
+        }
         style={[
           styles.messageContainer,
-          item.sender === "user" ? styles.userContainer : styles.aiContainer,
+          item.sender === "user" ? styles.userMessageContainer : styles.aiMessageContainer,
         ]}
       >
-        <View
-          style={[
-            styles.bubble,
-            item.sender === "user" ? styles.userBubble : styles.aiBubble,
-          ]}
-        >
-          <Text
-            style={item.sender === "user" ? styles.userText : styles.aiText}
+        {item.sender === "user" ? (
+          // User message - gradient bubble
+          <LinearGradient
+            colors={["#6366f1", "#8b5cf6"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.userBubble}
           >
-            {parts.map((p, i) =>
-              p.startsWith("http") ? (
-                <Text
-                  key={i}
-                  style={styles.link}
-                  onPress={() => Linking.openURL(p)}
-                >
-                  {p}
-                </Text>
-              ) : (
-                p
-              )
-            )}
-          </Text>
-          <Text style={styles.timestamp}>{item.timestamp}</Text>
-        </View>
-      </Reanimated.View>
+            <Text style={styles.userText}>
+              {parts.map((p, i) =>
+                p.startsWith("http") ? (
+                  <Text
+                    key={i}
+                    style={styles.linkUser}
+                    onPress={() => Linking.openURL(p)}
+                  >
+                    {p}
+                  </Text>
+                ) : (
+                  p
+                )
+              )}
+            </Text>
+            <Text style={styles.timestampUser}>{item.timestamp}</Text>
+          </LinearGradient>
+        ) : (
+          // AI message - glass bubble
+          <View style={styles.aiBubble}>
+            <Text style={styles.aiText}>
+              {parts.map((p, i) =>
+                p.startsWith("http") ? (
+                  <Text
+                    key={i}
+                    style={styles.linkAi}
+                    onPress={() => Linking.openURL(p)}
+                  >
+                    {p}
+                  </Text>
+                ) : (
+                  p
+                )
+              )}
+            </Text>
+            <Text style={styles.timestampAi}>{item.timestamp}</Text>
+          </View>
+        )}
+      </Animated.View>
     );
   };
 
@@ -454,30 +485,32 @@ export default function Chat() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
-      <View style={styles.header}>
+      {/* Background gradient */}
+      <LinearGradient
+        colors={["#1e293b", "#0f172a"]}
+        style={styles.backgroundGradient}
+      />
+
+      {/* Glass Header */}
+      <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
         <TouchableOpacity
           onPress={() => setSidebarVisible(true)}
           style={styles.menuButton}
         >
-          <Ionicons name="menu" size={28} color="#fff" />
+          <Ionicons name="menu" size={26} color="#f1f5f9" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AutoVitals</Text>
-        <TouchableOpacity
-          onPress={() => {
-            if (Platform.OS === "web") {
-              document.activeElement?.blur();
-            }
-            signOut();
-          }}
-          style={styles.logoutHeaderButton}
-        >
-          <Ionicons name="log-out-outline" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
 
-      {/* 🔧 FIX: Unmount sidebar on web to avoid aria-hidden focus bug */}
+        <Text style={styles.headerTitle}>AutoVitals</Text>
+
+        <TouchableOpacity onPress={() => signOut()} style={styles.logoutHeaderButton}>
+          <Ionicons name="log-out-outline" size={24} color="#f1f5f9" />
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Sidebar */}
       {sidebarVisible && (
         <Sidebar
           visible={sidebarVisible}
@@ -488,33 +521,55 @@ export default function Chat() {
         />
       )}
 
+      {/* Messages */}
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(i) => i.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.messagesList}
+        showsVerticalScrollIndicator={false}
       />
 
-      <Reanimated.View
-        entering={FadeInUp.delay(500).duration(800)}
-        style={styles.inputBar}
-      >
-        <TextInput
-          style={styles.input}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Type your message..."
-          multiline
-        />
-        <TouchableOpacity onPress={sendMessage} disabled={isSending}>
-          <Ionicons
-            name={isSending ? "hourglass-outline" : "send"}
-            size={22}
-            color="#27374D"
+      {/* Floating Input Bar (Glass Composer) */}
+      <Animated.View entering={FadeInUp.delay(400).duration(700)} style={styles.inputBarContainer}>
+        <View style={styles.inputBar}>
+          <TextInput
+            style={styles.input}
+            value={message}
+            onChangeText={setMessage}
+            placeholder="Message AutoVitals..."
+            placeholderTextColor="#64748b"
+            multiline
+            maxLength={500}
           />
-        </TouchableOpacity>
-      </Reanimated.View>
+
+          <Animated.View style={animatedSendButton}>
+            <TouchableOpacity
+              onPress={handleSendPress}
+              disabled={isSending || !message.trim()}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={
+                  isSending || !message.trim()
+                    ? ["#475569", "#475569"]
+                    : ["#6366f1", "#8b5cf6"]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.sendButton}
+              >
+                <Ionicons
+                  name={isSending ? "hourglass-outline" : "send"}
+                  size={20}
+                  color="#ffffff"
+                />
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -525,137 +580,186 @@ export default function Chat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7F8"
+    backgroundColor: "#0f172a",
   },
+  backgroundGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+
+  // ── Header (Glass) ──
   header: {
-    backgroundColor: "#27374D",
-    paddingTop: Platform.OS === "android" ? 40 : 16, // Adjust for safe area
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Platform.OS === "ios" ? 60 : 50,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    backgroundColor: "rgba(30,41,59,0.5)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148,163,184,0.1)",
     zIndex: 10,
   },
   menuButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
-    color: "#fff",
     fontSize: 20,
     fontWeight: "800",
-    flex: 1,
-    textAlign: "center",
+    color: "#f1f5f9",
     letterSpacing: 0.5,
   },
   logoutHeaderButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
+
+  // ── Messages List ──
   messagesList: {
     paddingHorizontal: 16,
     paddingTop: 20,
-    paddingBottom: 100, // Space for input bar
+    paddingBottom: 120,
   },
   messageContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
     width: "100%",
   },
-  bubble: {
+  userMessageContainer: {
+    alignItems: "flex-end",
+  },
+  aiMessageContainer: {
+    alignItems: "flex-start",
+  },
+
+  // ── User Bubble (Gradient) ──
+  userBubble: {
+    maxWidth: "85%",
     padding: 16,
     borderRadius: 20,
-    maxWidth: "85%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  userBubble: {
-    backgroundColor: "#27374D",
-    alignSelf: "flex-end",
     borderBottomRightRadius: 4,
-  },
-  aiBubble: {
-    backgroundColor: "#FFFFFF",
-    alignSelf: "flex-start",
-    borderTopLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: "rgba(157, 178, 191, 0.2)",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   userText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
-    lineHeight: 22
+    lineHeight: 22,
   },
-  aiText: {
-    color: "#27374D",
-    fontSize: 16,
-    lineHeight: 22
-  },
-  link: {
-    color: "#3498db",
-    textDecorationLine: "underline",
-    fontWeight: "600"
-  },
-  timestamp: {
+  timestampUser: {
     fontSize: 11,
+    color: "rgba(255,255,255,0.6)",
     marginTop: 6,
-    color: "rgba(0, 0, 0, 0.4)", // Adaptive color based on bg? No, fixed for now.
     alignSelf: "flex-end",
     fontWeight: "500",
   },
-  inputBar: {
+  linkUser: {
+    color: "#e0e7ff",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+
+  // ── AI Bubble (Glass) ──
+  aiBubble: {
+    maxWidth: "85%",
+    backgroundColor: "rgba(30,41,59,0.7)",
+    padding: 16,
+    borderRadius: 20,
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  aiText: {
+    color: "#f1f5f9",
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  timestampAi: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginTop: 6,
+    alignSelf: "flex-end",
+    fontWeight: "500",
+  },
+  linkAi: {
+    color: "#a5b4fc",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+
+  // ── Input Bar (Floating Glass Composer) ──
+  inputBarContainer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 32 : 16,
+    paddingTop: 12,
+  },
+  inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
-    padding: 16,
-    backgroundColor: "transparent", // Let the blur/gradient show if we had one, or just transparent over bg
+    backgroundColor: "rgba(30,41,59,0.9)",
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  // To make the input bar look like a floating glass/card
   input: {
     flex: 1,
     fontSize: 16,
+    color: "#f1f5f9",
     maxHeight: 100,
-    color: "#27374D",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12, // Align multiline text
-    paddingBottom: 12,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: "#DDE6ED",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingVertical: 8,
+    paddingRight: 12,
   },
-  sendButton: { // New style for send button container if needed, but we used TouchableOpacity direct
-    // Handled inline or wrap it if needed.
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
 
-  // Sidebar styles
+  // ── Sidebar (Glass Panel) ──
   sidebarContainer: {
     flex: 1,
     flexDirection: "row",
   },
-  overlay: {
+  sidebarBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(39, 55, 77, 0.6)", // Darker, tinted overlay
-    backdropFilter: "blur(4px)", // Works on web
+    backgroundColor: "rgba(15,23,42,0.85)",
   },
   sidebar: {
     position: "absolute",
@@ -663,85 +767,113 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SIDEBAR_WIDTH,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(30,41,59,0.95)",
+    borderRightWidth: 1,
+    borderRightColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",
     shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+
+  // ── Sidebar Header ──
+  sidebarHeader: {
+    paddingTop: 60,
+    paddingBottom: 32,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148,163,184,0.1)",
+  },
+  sidebarAvatarRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    padding: 3,
+    marginBottom: 16,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
     elevation: 10,
   },
-  sidebarHeader: {
+  sidebarAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 37,
     backgroundColor: "#27374D",
-    padding: 24,
-    paddingTop: 60,
-    borderBottomRightRadius: 30,
-  },
-  userInfo: {
-    flexDirection: "row",
     alignItems: "center",
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#DDE6ED",
     justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-    borderWidth: 2,
-    borderColor: "#526D82",
   },
-  avatarText: {
-    color: "#27374D",
-    fontSize: 24,
+  sidebarAvatarText: {
+    color: "#f1f5f9",
+    fontSize: 36,
     fontWeight: "800",
   },
-  userName: {
-    color: "#fff",
-    fontSize: 18,
+  sidebarUserName: {
+    fontSize: 20,
     fontWeight: "700",
+    color: "#f1f5f9",
     marginBottom: 4,
   },
-  userEmail: {
-    color: "#9DB2BF",
-    fontSize: 13,
+  sidebarUserEmail: {
+    fontSize: 14,
+    color: "#94a3b8",
     fontWeight: "500",
   },
+
+  // ── Menu Items ──
   menuItems: {
     flex: 1,
-    paddingTop: 30,
+    paddingTop: 24,
     paddingHorizontal: 16,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    marginBottom: 8,
+    marginBottom: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(51,65,85,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.1)",
+  },
+  menuIconContainer: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: "#F5F7F8",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
   menuLabel: {
+    flex: 1,
     fontSize: 16,
-    color: "#27374D",
-    marginLeft: 16,
+    color: "#f1f5f9",
     fontWeight: "600",
   },
+
+  // ── Sidebar Footer ──
   sidebarFooter: {
-    padding: 24,
+    padding: 16,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: "rgba(148,163,184,0.1)",
   },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#FEF2F2",
-    borderRadius: 12,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
   },
   logoutText: {
     fontSize: 16,
-    color: "#EF4444",
-    marginLeft: 16,
+    color: "#ef4444",
+    marginLeft: 12,
     fontWeight: "600",
   },
 });
