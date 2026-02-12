@@ -1,53 +1,66 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Linking,
   Modal,
+  Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from "react-native";
+import Animated, {
+  FadeInDown,
+  FadeInLeft,
+  FadeInRight,
+  FadeInUp,
+  ZoomIn,
+} from "react-native-reanimated";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function ChatHistory() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
 
   const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Detail view state
   const [selectedChat, setSelectedChat] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  // Ref for auto-scroll
+  const flatListRef = useRef(null);
 
   /* ============================
-     FETCH CHAT HISTORY
+     LOAD CHAT HISTORY
   ============================ */
   const loadChatHistory = async () => {
     try {
       setLoading(true);
-
       const token = await getToken();
-
       const res = await fetch(`${BACKEND_URL}/chat/history`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to load chat history");
-      }
-
+      if (!res.ok) throw new Error("Failed to load chat history");
       const data = await res.json();
       setChatHistory(data);
     } catch (err) {
@@ -62,8 +75,33 @@ export default function ChatHistory() {
     loadChatHistory();
   }, []);
 
+  // Load chat from URL if chatId is present
+  useEffect(() => {
+    if (params.chatId && chatHistory.length > 0) {
+      const chat = chatHistory.find(c => c.id === params.chatId);
+      if (chat) {
+        setSelectedChat(chat);
+        loadChatMessages(params.chatId);
+      }
+    } else if (!params.chatId) {
+      // Clear state when navigating back to list
+      setSelectedChat(null);
+      setChatMessages([]);
+      setMessage("");
+    }
+  }, [params.chatId, chatHistory]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (selectedChat && chatMessages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [chatMessages]);
+
   /* ============================
-     HELPERS
+     HELPERS & ACTIONS
   ============================ */
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp);
@@ -77,16 +115,11 @@ export default function ChatHistory() {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
   const getFilteredChats = () => {
     if (!searchQuery.trim()) return chatHistory;
-
     const query = searchQuery.toLowerCase();
     return chatHistory.filter(
       (chat) =>
@@ -97,13 +130,193 @@ export default function ChatHistory() {
   };
 
   /* ============================
-     ACTIONS
+     LOAD CHAT MESSAGES
   ============================ */
+  const loadChatMessages = async (chatId) => {
+    try {
+      setLoadingMessages(true);
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/chat/${chatId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error("Failed to load messages");
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        const normalized = data.flatMap((row, index) => {
+          const items = [];
+
+          if (row.prompt) {
+            items.push({
+              id: `user-${index}`,
+              sender: "user",
+              text: row.prompt,
+              timestamp: new Date(row.timestamp || Date.now()).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            });
+          }
+
+          if (row.response_ai) {
+            // Try to parse and format AI response
+            let aiText = row.response_ai;
+            
+            // Check if response is JSON format
+            try {
+              const parsed = typeof row.response_ai === 'string' 
+                ? JSON.parse(row.response_ai) 
+                : row.response_ai;
+              
+              // Format the response
+              let formatted = "";
+              if (parsed.diagnosis) formatted += `🔍 Diagnosis:\n${parsed.diagnosis}\n\n`;
+              if (parsed.explanation) formatted += `💡 Explanation:\n${parsed.explanation}\n\n`;
+              if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+                formatted += "🛠️ Suggested Steps:\n";
+                parsed.steps.forEach((s, i) => {
+                  formatted += `${i + 1}. ${s}\n`;
+                });
+                formatted += "\n";
+              }
+              if (Array.isArray(parsed.follow_up_questions) && parsed.follow_up_questions.length > 0) {
+                formatted += "❓ Follow-up Questions:\n";
+                parsed.follow_up_questions.forEach((q, i) => {
+                  formatted += `${i + 1}. ${q}\n`;
+                });
+                formatted += "\n";
+              }
+              if (typeof parsed.severity === "number") {
+                formatted += `⚠️ Severity: ${Math.round(parsed.severity * 100)}%\n`;
+              }
+              
+              if (formatted.trim()) {
+                aiText = formatted.trim();
+              }
+            } catch (e) {
+              // If parsing fails, use the original text
+              aiText = row.response_ai;
+            }
+
+            items.push({
+              id: `ai-${index}`,
+              sender: "ai",
+              text: aiText,
+              timestamp: new Date(row.timestamp || Date.now()).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            });
+          }
+
+          return items;
+        });
+
+        setChatMessages(normalized);
+      }
+    } catch (err) {
+      console.error("Load messages error:", err);
+      Alert.alert("Error", "Could not load messages");
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
   const handleChatPress = (chat) => {
-    router.push({
-      pathname: "/chat",
-      params: { chatId: chat.id },
-    });
+    router.push({ pathname: "/HistoryPage", params: { chatId: chat.id } });
+  };
+
+  const handleBackToList = () => {
+    router.push("/HistoryPage");
+  };
+
+  /* ============================
+     SEND MESSAGE
+  ============================ */
+  const sendMessage = async () => {
+    if (!message.trim() || isSending) return;
+
+    const userText = message.trim();
+    setMessage("");
+    setIsSending(true);
+
+    // Add user message immediately
+    const userMsg = {
+      id: `user-${Date.now()}`,
+      sender: "user",
+      text: userText,
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/vehicle/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          message: userText,
+          chat_id: selectedChat?.id || params.chatId
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to send message");
+      const data = await res.json();
+
+      // Format AI response
+      let aiText = "";
+      if (data.diagnosis) aiText += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
+      if (data.explanation) aiText += `💡 Explanation:\n${data.explanation}\n\n`;
+      if (Array.isArray(data.steps) && data.steps.length > 0) {
+        aiText += "🛠️ Suggested Steps:\n";
+        data.steps.forEach((s, i) => {
+          aiText += `${i + 1}. ${s}\n`;
+        });
+        aiText += "\n";
+      }
+      if (Array.isArray(data.follow_up_questions) && data.follow_up_questions.length > 0) {
+        aiText += "❓ Follow-up Questions:\n";
+        data.follow_up_questions.forEach((q, i) => {
+          aiText += `${i + 1}. ${q}\n`;
+        });
+        aiText += "\n";
+      }
+      if (typeof data.severity === "number") {
+        aiText += `⚠️ Severity: ${Math.round(data.severity * 100)}%\n`;
+      }
+
+      const aiMsg = {
+        id: data.chat_id || `ai-${Date.now()}`,
+        sender: "ai",
+        text: aiText.trim() || "⚠️ No response from agent",
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+      setChatMessages((prev) => [...prev, aiMsg]);
+    } catch (err) {
+      console.error("Send message error:", err);
+      const errorMsg = {
+        id: `error-${Date.now()}`,
+        sender: "ai",
+        text: `⚠️ ${err.message || "Something went wrong"}`,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+      setChatMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -125,338 +338,547 @@ export default function ChatHistory() {
   };
 
   /* ============================
-     RENDER ITEM
+     RENDER CHAT LIST ITEM
   ============================ */
-  const renderChatItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.chatCard}
-      onPress={() => handleChatPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.chatIcon}>
-        <Ionicons name="chatbubble" size={24} color="#27374D" />
-      </View>
+  const renderChatItem = ({ item, index }) => {
+    return (
+      <Animated.View
+        entering={FadeInUp.duration(600).delay(100 + index * 50).springify()}
+        style={styles.chatCardWrapper}
+      >
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => handleChatPress(item)}
+        >
+          <View style={styles.chatCard}>
+            {/* Icon container with gradient */}
+            <View style={styles.iconWrapper}>
+              <LinearGradient
+                colors={["#6366f1", "#8b5cf6"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.iconGradient}
+              >
+                <Ionicons name="chatbubble-ellipses" size={24} color="#ffffff" />
+              </LinearGradient>
+            </View>
 
-      <View style={styles.chatDetails}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.chatTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={styles.chatTime}>
-            {formatTimestamp(item.timestamp)}
-          </Text>
-        </View>
+            {/* Chat content */}
+            <View style={styles.chatContent}>
+              <View style={styles.chatHeaderRow}>
+                <Text style={styles.chatTitle} numberOfLines={1}>
+                  {item.title || "Untitled Chat"}
+                </Text>
+                <Text style={styles.chatTimestamp}>
+                  {formatTimestamp(item.timestamp)}
+                </Text>
+              </View>
 
-        <Text style={styles.chatPreview} numberOfLines={1}>
-          {item.preview}
-        </Text>
+              <Text style={styles.chatPreview} numberOfLines={2}>
+                {item.preview || item.lastMessage || "No messages yet"}
+              </Text>
 
-        <View style={styles.chatFooter}>
-          <Ionicons name="chatbubbles-outline" size={14} color="#9DB2BF" />
-          <Text style={styles.messageCountText}>
-            {item.messageCount} messages
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+              <View style={styles.chatMeta}>
+                <Ionicons name="chatbubbles-outline" size={13} color="#94a3b8" />
+                <Text style={styles.messageCount}>
+                  {item.messageCount || 0} messages
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  /* ============================
+     RENDER MESSAGE BUBBLE
+  ============================ */
+  const renderChatMessage = ({ item, index }) => {
+    const parts = item.text.split(/(https?:\/\/[^\s]+)/g);
+
+    return (
+      <Animated.View
+        entering={
+          item.sender === "user"
+            ? FadeInRight.duration(500).delay(50)
+            : FadeInLeft.duration(500).delay(50)
+        }
+        style={[
+          styles.messageContainer,
+          item.sender === "user" ? styles.userMessageContainer : styles.aiMessageContainer,
+        ]}
+      >
+        {item.sender === "user" ? (
+          // User message - gradient bubble
+          <LinearGradient
+            colors={["#6366f1", "#8b5cf6"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.userBubble}
+          >
+            <Text style={styles.userText}>
+              {parts.map((p, i) =>
+                p.startsWith("http") ? (
+                  <Text
+                    key={i}
+                    style={styles.linkUser}
+                    onPress={() => Linking.openURL(p)}
+                  >
+                    {p}
+                  </Text>
+                ) : (
+                  p
+                )
+              )}
+            </Text>
+            <Text style={styles.timestampUser}>{item.timestamp}</Text>
+          </LinearGradient>
+        ) : (
+          // AI message - glass bubble
+          <View style={styles.aiBubble}>
+            <Text style={styles.aiText}>
+              {parts.map((p, i) =>
+                p.startsWith("http") ? (
+                  <Text
+                    key={i}
+                    style={styles.linkAi}
+                    onPress={() => Linking.openURL(p)}
+                  >
+                    {p}
+                  </Text>
+                ) : (
+                  p
+                )
+              )}
+            </Text>
+            <Text style={styles.timestampAi}>{item.timestamp}</Text>
+          </View>
+        )}
+      </Animated.View>
+    );
+  };
 
   /* ============================
      UI
   ============================ */
   return (
     <View style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-        <Text style={styles.headerTitle}>Chat History</Text>
+      {/* Background gradient */}
+      <LinearGradient
+        colors={["#1e293b", "#0f172a", "#0f172a"]}
+        style={styles.backgroundGradient}
+      />
 
-        <TouchableOpacity onPress={() => setShowProfileModal(true)}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user?.firstName?.[0]?.toUpperCase() || "U"}
+      {selectedChat ? (
+        /* ============================
+           DETAIL VIEW - CHAT MESSAGES
+        ============================ */
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        >
+          {/* Detail Header */}
+          <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+            <TouchableOpacity onPress={handleBackToList} style={styles.headerButton}>
+              <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {selectedChat.title || "Chat Details"}
             </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
 
-      {/* SEARCH */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color="#9DB2BF" />
-        <TextInput
-          placeholder="Search conversations..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-        />
-      </View>
+            {/* Avatar button with gradient ring */}
+            <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.avatarButton}>
+              <Animated.View entering={ZoomIn.delay(300).duration(600).springify()}>
+                <LinearGradient
+                  colors={["#6366f1", "#8b5cf6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatarRing}
+                >
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarInitial}>
+                      {user?.firstName?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
 
-      {/* LIST */}
-      {loading ? (
-        <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+          {/* Messages List */}
+          {loadingMessages ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={chatMessages}
+              keyExtractor={(item) => item.id}
+              renderItem={renderChatMessage}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <Animated.View
+                  entering={FadeInUp.duration(700).delay(200)}
+                  style={styles.emptyState}
+                >
+                  <View style={styles.emptyIconContainer}>
+                    <Ionicons name="chatbubble-outline" size={64} color="#475569" />
+                  </View>
+                  <Text style={styles.emptyTitle}>No messages</Text>
+                  <Text style={styles.emptySubtitle}>
+                    This conversation has no messages yet
+                  </Text>
+                </Animated.View>
+              }
+            />
+          )}
+
+          {/* Floating Input Bar (Glass Composer) */}
+          <Animated.View entering={FadeInUp.delay(400).duration(700)} style={styles.inputBarContainer}>
+            <View style={styles.inputBar}>
+              <TextInput
+                style={styles.input}
+                value={message}
+                onChangeText={setMessage}
+                placeholder="Message AutoVitals..."
+                placeholderTextColor="#64748b"
+                multiline
+                maxLength={500}
+              />
+
+              <TouchableOpacity
+                onPress={sendMessage}
+                disabled={isSending || !message.trim()}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={
+                    isSending || !message.trim()
+                      ? ["#475569", "#475569"]
+                      : ["#6366f1", "#8b5cf6"]
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendButton}
+                >
+                  <Ionicons
+                    name={isSending ? "hourglass-outline" : "send"}
+                    size={20}
+                    color="#ffffff"
+                  />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
       ) : (
-        <FlatList
-          data={getFilteredChats()}
-          keyExtractor={(item) => item.id}
-          renderItem={renderChatItem}
-          ListEmptyComponent={
-            <Text style={{ textAlign: "center", marginTop: 40 }}>
-              No chat history
-            </Text>
-          }
-        />
+        /* ============================
+           LIST VIEW - ALL CHATS
+        ============================ */
+        <>
+          {/* Header */}
+          <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+              <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle}>Conversations</Text>
+
+            {/* Avatar button with gradient ring */}
+            <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.avatarButton}>
+              <Animated.View entering={ZoomIn.delay(300).duration(600).springify()}>
+                <LinearGradient
+                  colors={["#6366f1", "#8b5cf6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatarRing}
+                >
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarInitial}>
+                      {user?.firstName?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Content area */}
+          <View style={styles.contentArea}>
+            {/* Glass Search Bar */}
+            <Animated.View
+              entering={FadeInDown.duration(600).delay(200)}
+              style={styles.searchWrapper}
+            >
+              <View style={styles.glassSearchContainer}>
+                <Ionicons name="search" size={20} color="#94a3b8" style={styles.searchIcon} />
+                <TextInput
+                  placeholder="Search conversations..."
+                  placeholderTextColor="#64748b"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <Ionicons name="close-circle" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Animated.View>
+
+            {/* Chat List */}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#6366f1" />
+              </View>
+            ) : (
+              <FlatList
+                data={getFilteredChats()}
+                keyExtractor={(item) => item.id}
+                renderItem={renderChatItem}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <Animated.View
+                    entering={FadeInUp.duration(700).delay(200)}
+                    style={styles.emptyState}
+                  >
+                    <View style={styles.emptyIconContainer}>
+                      <Ionicons name="chatbubbles-outline" size={64} color="#475569" />
+                    </View>
+                    <Text style={styles.emptyTitle}>No conversations yet</Text>
+                    <Text style={styles.emptySubtitle}>
+                      Start chatting to see your history appear here
+                    </Text>
+                  </Animated.View>
+                }
+              />
+            )}
+          </View>
+        </>
       )}
 
-      {/* PROFILE MODAL */}
-      <Modal transparent visible={showProfileModal} animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          onPress={() => setShowProfileModal(false)}
-        >
-          <View style={styles.modal}>
-            <Text style={styles.modalName}>
-              {user?.firstName} {user?.lastName}
-            </Text>
-            <Text style={styles.modalEmail}>
-              {user?.primaryEmailAddress?.emailAddress}
-            </Text>
+      {/* Profile Modal – Glass Bottom Sheet */}
+      <Modal
+        transparent
+        visible={showProfileModal}
+        animationType="fade"
+        onRequestClose={() => setShowProfileModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={styles.backdropTouchable}
+            activeOpacity={1}
+            onPress={() => setShowProfileModal(false)}
+          />
 
-            <TouchableOpacity onPress={handleLogout}>
-              <Text style={styles.logout}>Logout</Text>
+          <Animated.View entering={FadeInUp.duration(500).springify()} style={styles.profileSheet}>
+            <View style={styles.sheetHandle} />
+
+            {/* Profile header with gradient avatar */}
+            <View style={styles.profileHeader}>
+              <LinearGradient
+                colors={["#6366f1", "#8b5cf6"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.largeAvatarRing}
+              >
+                <View style={styles.largeAvatar}>
+                  <Text style={styles.largeAvatarText}>
+                    {user?.firstName?.[0]?.toUpperCase() || "U"}
+                  </Text>
+                </View>
+              </LinearGradient>
+
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>
+                  {user?.firstName} {user?.lastName}
+                </Text>
+                <Text style={styles.profileEmail}>
+                  {user?.primaryEmailAddress?.emailAddress}
+                </Text>
+              </View>
+            </View>
+
+            {/* View Profile Button */}
+            <TouchableOpacity
+              style={styles.viewProfileButton}
+              onPress={() => {
+                setShowProfileModal(false);
+                router.push("/profile");
+              }}
+            >
+              <Ionicons name="person-outline" size={20} color="#a5b4fc" />
+              <Text style={styles.viewProfileText}>View Profile</Text>
+              <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+
+            {/* Logout Button */}
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+              <Text style={styles.logoutText}>Log out</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
       </Modal>
     </View>
   );
 }
 
-// /* ============================
-//    STYLES (unchanged)
-// ============================ */
-// const styles = StyleSheet.create({
-//   container: { flex: 1, backgroundColor: "#FFF" },
-//   header: {
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//     padding: 16,
-//     backgroundColor: "#27374D",
-//     alignItems: "center",
-//   },
-//   headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "600" },
-//   avatar: {
-//     width: 32,
-//     height: 32,
-//     borderRadius: 16,
-//     backgroundColor: "#9DB2BF",
-//     justifyContent: "center",
-//     alignItems: "center",
-//   },
-//   avatarText: { color: "#27374D", fontWeight: "bold" },
-//   searchBar: {
-//     flexDirection: "row",
-//     padding: 12,
-//     alignItems: "center",
-//     backgroundColor: "#F5F5F5",
-//   },
-//   searchInput: { marginLeft: 8, flex: 1 },
-//   chatCard: {
-//     flexDirection: "row",
-//     padding: 14,
-//     borderBottomWidth: 1,
-//     borderColor: "#EEE",
-//   },
-//   chatIcon: {
-//     marginRight: 12,
-//     backgroundColor: "#DDE6ED",
-//     padding: 10,
-//     borderRadius: 20,
-//   },
-//   chatDetails: { flex: 1 },
-//   chatHeader: {
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//   },
-//   chatTitle: { fontWeight: "600" },
-//   chatTime: { fontSize: 12, color: "#9DB2BF" },
-//   chatPreview: { color: "#666", marginTop: 2 },
-//   chatFooter: { flexDirection: "row", marginTop: 4 },
-//   messageCountText: { marginLeft: 4, fontSize: 12, color: "#9DB2BF" },
-//   modalOverlay: {
-//     flex: 1,
-//     backgroundColor: "rgba(0,0,0,0.4)",
-//     justifyContent: "center",
-//     alignItems: "center",
-//   },
-//   modal: {
-//     backgroundColor: "#FFF",
-//     padding: 20,
-//     borderRadius: 10,
-//     width: "80%",
-//   },
-//   modalName: { fontWeight: "600", fontSize: 16 },
-//   modalEmail: { color: "#666", marginBottom: 12 },
-//   logout: { color: "#FF6B6B", marginTop: 10 },
-// });
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#0f172a",
+  },
+  backgroundGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 300,
   },
   header: {
-    backgroundColor: "#27374D",
-    paddingTop: 50,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  backBtn: {
-    padding: 4,
-  },
-  headerCenter: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 16,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    zIndex: 10,
   },
   headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
-    marginLeft: 8,
+    color: "#f1f5f9",
+    letterSpacing: 0.3,
   },
-  profileBtn: {
-    padding: 4,
-  },
-  profileAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#526D82",
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
-  profileAvatarText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+  avatarButton: {
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
-  searchContainer: {
-    padding: 16,
+  avatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    padding: 2.5,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  searchBar: {
+  avatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 19,
+    backgroundColor: "#27374D",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitial: {
+    color: "#f1f5f9",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+
+  // ── Content Area ──
+  contentArea: {
+    flex: 1,
+    paddingTop: 16,
+  },
+
+  // ── Glass Search Bar ──
+  searchWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  glassSearchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: "rgba(30,41,59,0.65)",
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  searchIcon: {
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: "#27374D",
+    fontSize: 16,
+    color: "#f1f5f9",
+    fontWeight: "500",
   },
-  statsContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#27374D",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#9DB2BF",
-    fontWeight: "600",
-  },
-  actionsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  deleteAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF5F5",
-    padding: 12,
-    borderRadius: 10,
-    gap: 8,
-  },
-  deleteAllText: {
-    color: "#FF6B6B",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+
+  // ── Chat List ──
   listContent: {
-    padding: 16,
-    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 100,
+  },
+  chatCardWrapper: {
+    marginBottom: 16,
   },
   chatCard: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  chatContent: {
-    flex: 1,
-    flexDirection: "row",
-    padding: 16,
-  },
-  chatIconContainer: {
-    marginRight: 12,
-  },
-  chatIcon: {
-    width: 48,
-    height: 48,
+    backgroundColor: "rgba(30,41,59,0.65)",
     borderRadius: 24,
-    backgroundColor: "#E8F0FE",
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+
+  // ── Icon with Gradient ──
+  iconWrapper: {
+    marginRight: 14,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  iconGradient: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  chatDetails: {
+
+  // ── Chat Content ──
+  chatContent: {
     flex: 1,
   },
-  chatHeader: {
+  chatHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
@@ -465,188 +887,298 @@ const styles = StyleSheet.create({
   chatTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#27374D",
+    color: "#f1f5f9",
     flex: 1,
-    marginRight: 8,
+    marginRight: 12,
   },
-  chatTime: {
-    fontSize: 12,
-    color: "#9DB2BF",
-    fontWeight: "600",
+  chatTimestamp: {
+    fontSize: 13,
+    color: "#94a3b8",
+    fontWeight: "500",
   },
   chatPreview: {
     fontSize: 14,
-    color: "#526D82",
-    marginBottom: 8,
+    color: "#94a3b8",
+    lineHeight: 20,
+    marginBottom: 10,
   },
-  chatFooter: {
+  chatMeta: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 6,
   },
   messageCount: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    fontSize: 13,
+    color: "#94a3b8",
+    fontWeight: "500",
   },
-  messageCountText: {
-    fontSize: 12,
-    color: "#9DB2BF",
-    fontWeight: "600",
+
+  // ── Message Bubbles ──
+  messagesContent: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 120,
   },
-  deleteBtn: {
-    padding: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#27374D",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#9DB2BF",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  deleteModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  deleteModal: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
-    maxWidth: 340,
-    alignItems: "center",
-  },
-  deleteModalIcon: {
+  messageContainer: {
     marginBottom: 16,
+    width: "100%",
   },
-  deleteModalTitle: {
+  userMessageContainer: {
+    alignItems: "flex-end",
+  },
+  aiMessageContainer: {
+    alignItems: "flex-start",
+  },
+
+  // ── User Bubble (Gradient) ──
+  userBubble: {
+    maxWidth: "85%",
+    padding: 16,
+    borderRadius: 20,
+    borderBottomRightRadius: 4,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  userText: {
+    color: "#ffffff",
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  timestampUser: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.6)",
+    marginTop: 6,
+    alignSelf: "flex-end",
+    fontWeight: "500",
+  },
+  linkUser: {
+    color: "#e0e7ff",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+
+  // ── AI Bubble (Glass) ──
+  aiBubble: {
+    maxWidth: "85%",
+    backgroundColor: "rgba(30,41,59,0.7)",
+    padding: 16,
+    borderRadius: 20,
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  aiText: {
+    color: "#f1f5f9",
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  timestampAi: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginTop: 6,
+    alignSelf: "flex-end",
+    fontWeight: "500",
+  },
+  linkAi: {
+    color: "#a5b4fc",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+
+  // ── Loading ──
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
+  },
+
+  // ── Empty State ──
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 120,
+    paddingHorizontal: 40,
+  },
+  emptyIconContainer: {
+    marginBottom: 24,
+    opacity: 0.4,
+  },
+  emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#27374D",
+    color: "#f1f5f9",
     marginBottom: 8,
   },
-  deleteModalMessage: {
-    fontSize: 14,
-    color: "#526D82",
+  emptySubtitle: {
+    fontSize: 15,
+    color: "#94a3b8",
     textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 20,
+    lineHeight: 22,
   },
-  deleteModalButtons: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
-  cancelBtn: {
+
+  // ── Profile Modal (Glass Bottom Sheet) ──
+  modalBackdrop: {
     flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#F5F5F5",
-    alignItems: "center",
+    backgroundColor: "rgba(15,23,42,0.85)",
+    justifyContent: "flex-end",
   },
-  cancelBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#27374D",
-  },
-  confirmDeleteBtn: {
+  backdropTouchable: {
     flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#FF6B6B",
-    alignItems: "center",
   },
-  confirmDeleteBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  profileModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    paddingTop: 90,
-    paddingRight: 20,
-  },
-  profileModal: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    width: 280,
+  profileSheet: {
+    backgroundColor: "rgba(30,41,59,0.95)",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 40,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
   },
-  profileModalHeader: {
+  sheetHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: "#475569",
+    borderRadius: 999,
+    alignSelf: "center",
+    marginBottom: 28,
+  },
+  profileHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 24,
   },
-  profileModalAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  largeAvatarRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    padding: 3,
+    marginRight: 16,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  largeAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 33,
     backgroundColor: "#27374D",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
   },
-  profileModalAvatarText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700",
+  largeAvatarText: {
+    color: "#f1f5f9",
+    fontSize: 32,
+    fontWeight: "800",
   },
-  profileModalInfo: {
+  profileInfo: {
     flex: 1,
   },
-  profileModalName: {
-    fontSize: 16,
+  profileName: {
+    fontSize: 22,
     fontWeight: "700",
-    color: "#27374D",
+    color: "#f1f5f9",
     marginBottom: 4,
   },
-  profileModalEmail: {
-    fontSize: 13,
-    color: "#9DB2BF",
+  profileEmail: {
+    fontSize: 14,
+    color: "#94a3b8",
+    fontWeight: "500",
   },
-  profileModalDivider: {
-    height: 1,
-    backgroundColor: "#F0F0F0",
-    marginVertical: 12,
-  },
-  profileModalOption: {
+  viewProfileButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(99,102,241,0.12)",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.2)",
   },
-  profileModalOptionText: {
-    fontSize: 15,
-    color: "#27374D",
-    marginLeft: 12,
+  viewProfileText: {
+    flex: 1,
+    color: "#a5b4fc",
+    fontSize: 16,
     fontWeight: "600",
+    marginLeft: 12,
   },
-  logoutOption: {
-    marginTop: 4,
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
   },
   logoutText: {
-    color: "#FF6B6B",
+    color: "#ef4444",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 12,
+  },
+
+  // ── Input Bar (Floating Glass Composer) ──
+  inputBarContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 32 : 16,
+    paddingTop: 12,
+  },
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    backgroundColor: "rgba(30,41,59,0.9)",
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: "#f1f5f9",
+    maxHeight: 100,
+    paddingVertical: 8,
+    paddingRight: 12,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
