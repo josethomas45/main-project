@@ -19,9 +19,6 @@ import Animated, {
   FadeInDown,
   FadeInUp,
   ZoomIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
 } from "react-native-reanimated";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -113,38 +110,17 @@ export default function ChatHistory() {
     ]);
   };
 
-  /* Press scale animation helper */
-  const createPressHandler = () => {
-    const scale = useSharedValue(1);
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
-
-    const onPressIn = () => {
-      scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
-    };
-    const onPressOut = () => {
-      scale.value = withSpring(1, { damping: 15, stiffness: 400 });
-    };
-
-    return { animatedStyle, onPressIn, onPressOut };
-  };
-
   /* ============================
      RENDER ITEM
   ============================ */
   const renderChatItem = ({ item, index }) => {
-    const { animatedStyle, onPressIn, onPressOut } = createPressHandler();
-
     return (
       <Animated.View
         entering={FadeInUp.duration(600).delay(100 + index * 50).springify()}
-        style={[styles.chatCardWrapper, animatedStyle]}
+        style={styles.chatCardWrapper}
       >
         <TouchableOpacity
           activeOpacity={0.7}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
           onPress={() => handleChatPress(item)}
         >
           <View style={styles.chatCard}>

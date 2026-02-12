@@ -20,9 +20,6 @@ import Animated, {
   FadeInDown,
   FadeInUp,
   ZoomIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
 } from "react-native-reanimated";
 
 import {
@@ -212,35 +209,14 @@ export default function MaintenanceTracking() {
     );
   };
 
-  // Press scale helper
-  const createPressAnimation = () => {
-    const scale = useSharedValue(1);
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
-
-    const onPressIn = () => {
-      scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
-    };
-    const onPressOut = () => {
-      scale.value = withSpring(1, { damping: 15, stiffness: 400 });
-    };
-
-    return { animatedStyle, onPressIn, onPressOut };
-  };
-
   const renderReminder = ({ item, index }) => {
-    const { animatedStyle, onPressIn, onPressOut } = createPressAnimation();
-
     return (
       <Animated.View
         entering={FadeInUp.duration(600).delay(100 + index * 60).springify()}
-        style={[styles.cardWrapper, animatedStyle]}
+        style={styles.cardWrapper}
       >
         <TouchableOpacity
           activeOpacity={0.7}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
           onPress={() => handleEditPress(item)}
         >
           <View style={styles.reminderCard}>
