@@ -1,13 +1,16 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Linking,
   Modal,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -17,6 +20,8 @@ import {
 } from "react-native";
 import Animated, {
   FadeInDown,
+  FadeInLeft,
+  FadeInRight,
   FadeInUp,
   ZoomIn,
 } from "react-native-reanimated";
@@ -25,6 +30,7 @@ const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function ChatHistory() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
 
@@ -33,8 +39,18 @@ export default function ChatHistory() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Detail view state
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  // Ref for auto-scroll
+  const flatListRef = useRef(null);
+
   /* ============================
-     FETCH CHAT HISTORY
+     LOAD CHAT HISTORY
   ============================ */
   const loadChatHistory = async () => {
     try {
@@ -58,6 +74,31 @@ export default function ChatHistory() {
   useEffect(() => {
     loadChatHistory();
   }, []);
+
+  // Load chat from URL if chatId is present
+  useEffect(() => {
+    if (params.chatId && chatHistory.length > 0) {
+      const chat = chatHistory.find(c => c.id === params.chatId);
+      if (chat) {
+        setSelectedChat(chat);
+        loadChatMessages(params.chatId);
+      }
+    } else if (!params.chatId) {
+      // Clear state when navigating back to list
+      setSelectedChat(null);
+      setChatMessages([]);
+      setMessage("");
+    }
+  }, [params.chatId, chatHistory]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (selectedChat && chatMessages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [chatMessages]);
 
   /* ============================
      HELPERS & ACTIONS
@@ -88,8 +129,194 @@ export default function ChatHistory() {
     );
   };
 
+  /* ============================
+     LOAD CHAT MESSAGES
+  ============================ */
+  const loadChatMessages = async (chatId) => {
+    try {
+      setLoadingMessages(true);
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/chat/${chatId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error("Failed to load messages");
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        const normalized = data.flatMap((row, index) => {
+          const items = [];
+
+          if (row.prompt) {
+            items.push({
+              id: `user-${index}`,
+              sender: "user",
+              text: row.prompt,
+              timestamp: new Date(row.timestamp || Date.now()).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            });
+          }
+
+          if (row.response_ai) {
+            // Try to parse and format AI response
+            let aiText = row.response_ai;
+            
+            // Check if response is JSON format
+            try {
+              const parsed = typeof row.response_ai === 'string' 
+                ? JSON.parse(row.response_ai) 
+                : row.response_ai;
+              
+              // Format the response
+              let formatted = "";
+              if (parsed.diagnosis) formatted += `🔍 Diagnosis:\n${parsed.diagnosis}\n\n`;
+              if (parsed.explanation) formatted += `💡 Explanation:\n${parsed.explanation}\n\n`;
+              if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+                formatted += "🛠️ Suggested Steps:\n";
+                parsed.steps.forEach((s, i) => {
+                  formatted += `${i + 1}. ${s}\n`;
+                });
+                formatted += "\n";
+              }
+              if (Array.isArray(parsed.follow_up_questions) && parsed.follow_up_questions.length > 0) {
+                formatted += "❓ Follow-up Questions:\n";
+                parsed.follow_up_questions.forEach((q, i) => {
+                  formatted += `${i + 1}. ${q}\n`;
+                });
+                formatted += "\n";
+              }
+              if (typeof parsed.severity === "number") {
+                formatted += `⚠️ Severity: ${Math.round(parsed.severity * 100)}%\n`;
+              }
+              
+              if (formatted.trim()) {
+                aiText = formatted.trim();
+              }
+            } catch (e) {
+              // If parsing fails, use the original text
+              aiText = row.response_ai;
+            }
+
+            items.push({
+              id: `ai-${index}`,
+              sender: "ai",
+              text: aiText,
+              timestamp: new Date(row.timestamp || Date.now()).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            });
+          }
+
+          return items;
+        });
+
+        setChatMessages(normalized);
+      }
+    } catch (err) {
+      console.error("Load messages error:", err);
+      Alert.alert("Error", "Could not load messages");
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
   const handleChatPress = (chat) => {
-    router.push({ pathname: "/chat", params: { chatId: chat.id } });
+    router.push({ pathname: "/HistoryPage", params: { chatId: chat.id } });
+  };
+
+  const handleBackToList = () => {
+    router.push("/HistoryPage");
+  };
+
+  /* ============================
+     SEND MESSAGE
+  ============================ */
+  const sendMessage = async () => {
+    if (!message.trim() || isSending) return;
+
+    const userText = message.trim();
+    setMessage("");
+    setIsSending(true);
+
+    // Add user message immediately
+    const userMsg = {
+      id: `user-${Date.now()}`,
+      sender: "user",
+      text: userText,
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/vehicle/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          message: userText,
+          chat_id: selectedChat?.id || params.chatId
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to send message");
+      const data = await res.json();
+
+      // Format AI response
+      let aiText = "";
+      if (data.diagnosis) aiText += `🔍 Diagnosis:\n${data.diagnosis}\n\n`;
+      if (data.explanation) aiText += `💡 Explanation:\n${data.explanation}\n\n`;
+      if (Array.isArray(data.steps) && data.steps.length > 0) {
+        aiText += "🛠️ Suggested Steps:\n";
+        data.steps.forEach((s, i) => {
+          aiText += `${i + 1}. ${s}\n`;
+        });
+        aiText += "\n";
+      }
+      if (Array.isArray(data.follow_up_questions) && data.follow_up_questions.length > 0) {
+        aiText += "❓ Follow-up Questions:\n";
+        data.follow_up_questions.forEach((q, i) => {
+          aiText += `${i + 1}. ${q}\n`;
+        });
+        aiText += "\n";
+      }
+      if (typeof data.severity === "number") {
+        aiText += `⚠️ Severity: ${Math.round(data.severity * 100)}%\n`;
+      }
+
+      const aiMsg = {
+        id: data.chat_id || `ai-${Date.now()}`,
+        sender: "ai",
+        text: aiText.trim() || "⚠️ No response from agent",
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+      setChatMessages((prev) => [...prev, aiMsg]);
+    } catch (err) {
+      console.error("Send message error:", err);
+      const errorMsg = {
+        id: `error-${Date.now()}`,
+        sender: "ai",
+        text: `⚠️ ${err.message || "Something went wrong"}`,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+      setChatMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -111,7 +338,7 @@ export default function ChatHistory() {
   };
 
   /* ============================
-     RENDER ITEM
+     RENDER CHAT LIST ITEM
   ============================ */
   const renderChatItem = ({ item, index }) => {
     return (
@@ -165,6 +392,74 @@ export default function ChatHistory() {
   };
 
   /* ============================
+     RENDER MESSAGE BUBBLE
+  ============================ */
+  const renderChatMessage = ({ item, index }) => {
+    const parts = item.text.split(/(https?:\/\/[^\s]+)/g);
+
+    return (
+      <Animated.View
+        entering={
+          item.sender === "user"
+            ? FadeInRight.duration(500).delay(50)
+            : FadeInLeft.duration(500).delay(50)
+        }
+        style={[
+          styles.messageContainer,
+          item.sender === "user" ? styles.userMessageContainer : styles.aiMessageContainer,
+        ]}
+      >
+        {item.sender === "user" ? (
+          // User message - gradient bubble
+          <LinearGradient
+            colors={["#6366f1", "#8b5cf6"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.userBubble}
+          >
+            <Text style={styles.userText}>
+              {parts.map((p, i) =>
+                p.startsWith("http") ? (
+                  <Text
+                    key={i}
+                    style={styles.linkUser}
+                    onPress={() => Linking.openURL(p)}
+                  >
+                    {p}
+                  </Text>
+                ) : (
+                  p
+                )
+              )}
+            </Text>
+            <Text style={styles.timestampUser}>{item.timestamp}</Text>
+          </LinearGradient>
+        ) : (
+          // AI message - glass bubble
+          <View style={styles.aiBubble}>
+            <Text style={styles.aiText}>
+              {parts.map((p, i) =>
+                p.startsWith("http") ? (
+                  <Text
+                    key={i}
+                    style={styles.linkAi}
+                    onPress={() => Linking.openURL(p)}
+                  >
+                    {p}
+                  </Text>
+                ) : (
+                  p
+                )
+              )}
+            </Text>
+            <Text style={styles.timestampAi}>{item.timestamp}</Text>
+          </View>
+        )}
+      </Animated.View>
+    );
+  };
+
+  /* ============================
      UI
   ============================ */
   return (
@@ -177,87 +472,200 @@ export default function ChatHistory() {
         style={styles.backgroundGradient}
       />
 
-      {/* Header */}
-      <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Conversations</Text>
-
-        {/* Avatar button with gradient ring */}
-        <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.avatarButton}>
-          <Animated.View entering={ZoomIn.delay(300).duration(600).springify()}>
-            <LinearGradient
-              colors={["#6366f1", "#8b5cf6"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatarRing}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarInitial}>
-                  {user?.firstName?.[0]?.toUpperCase() || "U"}
-                </Text>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Content area */}
-      <View style={styles.contentArea}>
-        {/* Glass Search Bar */}
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(200)}
-          style={styles.searchWrapper}
+      {selectedChat ? (
+        /* ============================
+           DETAIL VIEW - CHAT MESSAGES
+        ============================ */
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         >
-          <View style={styles.glassSearchContainer}>
-            <Ionicons name="search" size={20} color="#94a3b8" style={styles.searchIcon} />
-            <TextInput
-              placeholder="Search conversations..."
-              placeholderTextColor="#64748b"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={styles.searchInput}
-              autoCapitalize="none"
+          {/* Detail Header */}
+          <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+            <TouchableOpacity onPress={handleBackToList} style={styles.headerButton}>
+              <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {selectedChat.title || "Chat Details"}
+            </Text>
+
+            {/* Avatar button with gradient ring */}
+            <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.avatarButton}>
+              <Animated.View entering={ZoomIn.delay(300).duration(600).springify()}>
+                <LinearGradient
+                  colors={["#6366f1", "#8b5cf6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatarRing}
+                >
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarInitial}>
+                      {user?.firstName?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Messages List */}
+          {loadingMessages ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={chatMessages}
+              keyExtractor={(item) => item.id}
+              renderItem={renderChatMessage}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <Animated.View
+                  entering={FadeInUp.duration(700).delay(200)}
+                  style={styles.emptyState}
+                >
+                  <View style={styles.emptyIconContainer}>
+                    <Ionicons name="chatbubble-outline" size={64} color="#475569" />
+                  </View>
+                  <Text style={styles.emptyTitle}>No messages</Text>
+                  <Text style={styles.emptySubtitle}>
+                    This conversation has no messages yet
+                  </Text>
+                </Animated.View>
+              }
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <Ionicons name="close-circle" size={20} color="#64748b" />
+          )}
+
+          {/* Floating Input Bar (Glass Composer) */}
+          <Animated.View entering={FadeInUp.delay(400).duration(700)} style={styles.inputBarContainer}>
+            <View style={styles.inputBar}>
+              <TextInput
+                style={styles.input}
+                value={message}
+                onChangeText={setMessage}
+                placeholder="Message AutoVitals..."
+                placeholderTextColor="#64748b"
+                multiline
+                maxLength={500}
+              />
+
+              <TouchableOpacity
+                onPress={sendMessage}
+                disabled={isSending || !message.trim()}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={
+                    isSending || !message.trim()
+                      ? ["#475569", "#475569"]
+                      : ["#6366f1", "#8b5cf6"]
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendButton}
+                >
+                  <Ionicons
+                    name={isSending ? "hourglass-outline" : "send"}
+                    size={20}
+                    color="#ffffff"
+                  />
+                </LinearGradient>
               </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      ) : (
+        /* ============================
+           LIST VIEW - ALL CHATS
+        ============================ */
+        <>
+          {/* Header */}
+          <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+              <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle}>Conversations</Text>
+
+            {/* Avatar button with gradient ring */}
+            <TouchableOpacity onPress={() => setShowProfileModal(true)} style={styles.avatarButton}>
+              <Animated.View entering={ZoomIn.delay(300).duration(600).springify()}>
+                <LinearGradient
+                  colors={["#6366f1", "#8b5cf6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatarRing}
+                >
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarInitial}>
+                      {user?.firstName?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Content area */}
+          <View style={styles.contentArea}>
+            {/* Glass Search Bar */}
+            <Animated.View
+              entering={FadeInDown.duration(600).delay(200)}
+              style={styles.searchWrapper}
+            >
+              <View style={styles.glassSearchContainer}>
+                <Ionicons name="search" size={20} color="#94a3b8" style={styles.searchIcon} />
+                <TextInput
+                  placeholder="Search conversations..."
+                  placeholderTextColor="#64748b"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <Ionicons name="close-circle" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Animated.View>
+
+            {/* Chat List */}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#6366f1" />
+              </View>
+            ) : (
+              <FlatList
+                data={getFilteredChats()}
+                keyExtractor={(item) => item.id}
+                renderItem={renderChatItem}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <Animated.View
+                    entering={FadeInUp.duration(700).delay(200)}
+                    style={styles.emptyState}
+                  >
+                    <View style={styles.emptyIconContainer}>
+                      <Ionicons name="chatbubbles-outline" size={64} color="#475569" />
+                    </View>
+                    <Text style={styles.emptyTitle}>No conversations yet</Text>
+                    <Text style={styles.emptySubtitle}>
+                      Start chatting to see your history appear here
+                    </Text>
+                  </Animated.View>
+                }
+              />
             )}
           </View>
-        </Animated.View>
-
-        {/* Chat List */}
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#6366f1" />
-          </View>
-        ) : (
-          <FlatList
-            data={getFilteredChats()}
-            keyExtractor={(item) => item.id}
-            renderItem={renderChatItem}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <Animated.View
-                entering={FadeInUp.duration(700).delay(200)}
-                style={styles.emptyState}
-              >
-                <View style={styles.emptyIconContainer}>
-                  <Ionicons name="chatbubbles-outline" size={64} color="#475569" />
-                </View>
-                <Text style={styles.emptyTitle}>No conversations yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  Start chatting to see your history appear here
-                </Text>
-              </Animated.View>
-            }
-          />
-        )}
-      </View>
+        </>
+      )}
 
       {/* Profile Modal – Glass Bottom Sheet */}
       <Modal
@@ -505,6 +913,86 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
+  // ── Message Bubbles ──
+  messagesContent: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 120,
+  },
+  messageContainer: {
+    marginBottom: 16,
+    width: "100%",
+  },
+  userMessageContainer: {
+    alignItems: "flex-end",
+  },
+  aiMessageContainer: {
+    alignItems: "flex-start",
+  },
+
+  // ── User Bubble (Gradient) ──
+  userBubble: {
+    maxWidth: "85%",
+    padding: 16,
+    borderRadius: 20,
+    borderBottomRightRadius: 4,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  userText: {
+    color: "#ffffff",
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  timestampUser: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.6)",
+    marginTop: 6,
+    alignSelf: "flex-end",
+    fontWeight: "500",
+  },
+  linkUser: {
+    color: "#e0e7ff",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+
+  // ── AI Bubble (Glass) ──
+  aiBubble: {
+    maxWidth: "85%",
+    backgroundColor: "rgba(30,41,59,0.7)",
+    padding: 16,
+    borderRadius: 20,
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  aiText: {
+    color: "#f1f5f9",
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  timestampAi: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginTop: 6,
+    alignSelf: "flex-end",
+    fontWeight: "500",
+  },
+  linkAi: {
+    color: "#a5b4fc",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+
   // ── Loading ──
   loadingContainer: {
     flex: 1,
@@ -646,5 +1134,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 12,
+  },
+
+  // ── Input Bar (Floating Glass Composer) ──
+  inputBarContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 32 : 16,
+    paddingTop: 12,
+  },
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    backgroundColor: "rgba(30,41,59,0.9)",
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: "#f1f5f9",
+    maxHeight: 100,
+    paddingVertical: 8,
+    paddingRight: 12,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
