@@ -58,7 +58,7 @@ export default function SignUp() {
       if (createdSessionId) {
         await setActive({ session: createdSessionId });
         console.log("Google sign-up successful");
-        router.replace("/chat");
+        router.replace("/dashboard");
       } else {
         throw new Error("No session created");
       }
