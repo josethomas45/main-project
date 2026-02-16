@@ -128,12 +128,8 @@ export default function Dashboard() {
                 <Animated.View entering={FadeInDown.duration(700)} style={styles.heroSection}>
                     <View style={styles.heroContent}>
                         <View style={styles.heroTextContainer}>
-                            <Text style={styles.greeting}>Hello, {user?.firstName || "there"} 👋</Text>
+                            <Text style={styles.greeting}>Hello, {user?.firstName || "there"} </Text>
                             <Text style={styles.heroSubtitle}>Your vehicle is ready</Text>
-                            <View style={styles.vehicleBadge}>
-                                <Ionicons name="car-sport" size={16} color="#a5b4fc" />
-                                <Text style={styles.vehicleName}>{vehicleData.name}</Text>
-                            </View>
                         </View>
 
                         {/* Avatar with gradient ring */}
@@ -153,14 +149,21 @@ export default function Dashboard() {
                         </Animated.View>
                     </View>
 
-                    {/* Logout button */}
-                    <TouchableOpacity
-                        style={styles.logoutButton}
-                        onPress={() => signOut()}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-                    </TouchableOpacity>
+                    {/* Vehicle badge and Logout button row */}
+                    <View style={styles.badgeLogoutRow}>
+                        <View style={styles.vehicleBadge}>
+                            <Ionicons name="car-sport" size={16} color="#a5b4fc" />
+                            <Text style={styles.vehicleName}>{vehicleData.name}</Text>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.logoutButton}
+                            onPress={() => signOut()}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+                        </TouchableOpacity>
+                    </View>
                 </Animated.View>
 
                 {/* Vehicle Health Card (Glass) */}
@@ -330,6 +333,12 @@ const styles = StyleSheet.create({
         fontWeight: "500",
         marginBottom: 12,
     },
+    badgeLogoutRow: {
+        flexDirection: "row",
+        justifyContent: "flex-start",
+        alignItems: "center",
+        gap: 12,
+    },
     vehicleBadge: {
         flexDirection: "row",
         alignItems: "center",
@@ -374,8 +383,9 @@ const styles = StyleSheet.create({
     },
     logoutButton: {
         alignSelf: "flex-start",
-        padding: 10,
-        borderRadius: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 16,
         backgroundColor: "rgba(239,68,68,0.12)",
         borderWidth: 1,
         borderColor: "rgba(239,68,68,0.2)",
