@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+    Modal,
     ScrollView,
     StatusBar,
     StyleSheet,
@@ -32,6 +33,8 @@ export default function Dashboard() {
         fuelLevel: "65%",
         lastUpdate: "Just now",
     });
+
+    const [showMenu, setShowMenu] = useState(false);
 
     // Press animation helper
     const createPressAnimation = () => {
@@ -120,6 +123,53 @@ export default function Dashboard() {
                 style={styles.backgroundGradient}
             />
 
+            {/* Popup Menu Modal */}
+            <Modal
+                visible={showMenu}
+                transparent={true}
+                animationType="none"
+                onRequestClose={() => setShowMenu(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowMenu(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <Animated.View
+                            entering={FadeInDown.duration(200)}
+                            style={styles.popupMenu}
+                        >
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={() => {
+                                    setShowMenu(false);
+                                    router.push("/profile");
+                                }}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="person-outline" size={20} color="#f1f5f9" />
+                                <Text style={styles.menuText}>Profile</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.menuDivider} />
+
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={() => {
+                                    setShowMenu(false);
+                                    signOut();
+                                }}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+                                <Text style={[styles.menuText, { color: "#ef4444" }]}>Logout</Text>
+                            </TouchableOpacity>
+                        </Animated.View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -134,18 +184,23 @@ export default function Dashboard() {
 
                         {/* Avatar with gradient ring */}
                         <Animated.View entering={ZoomIn.delay(300).duration(700).springify()}>
-                            <LinearGradient
-                                colors={["#6366f1", "#8b5cf6"]}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.avatarRing}
+                            <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => setShowMenu(!showMenu)}
                             >
-                                <View style={styles.avatar}>
-                                    <Text style={styles.avatarText}>
-                                        {user?.firstName?.[0]?.toUpperCase() || "U"}
-                                    </Text>
-                                </View>
-                            </LinearGradient>
+                                <LinearGradient
+                                    colors={["#6366f1", "#8b5cf6"]}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.avatarRing}
+                                >
+                                    <View style={styles.avatar}>
+                                        <Text style={styles.avatarText}>
+                                            {user?.firstName?.[0]?.toUpperCase() || "U"}
+                                        </Text>
+                                    </View>
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </Animated.View>
                     </View>
 
@@ -389,6 +444,46 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(239,68,68,0.12)",
         borderWidth: 1,
         borderColor: "rgba(239,68,68,0.2)",
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.3)",
+    },
+    modalContent: {
+        position: "absolute",
+        top: 120,
+        right: 20,
+    },
+    popupMenu: {
+        backgroundColor: "rgba(30,41,59,0.95)",
+        borderRadius: 16,
+        padding: 8,
+        minWidth: 160,
+        borderWidth: 1,
+        borderColor: "rgba(148,163,184,0.2)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 10,
+    },
+    menuItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        gap: 12,
+        borderRadius: 12,
+    },
+    menuText: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: "#f1f5f9",
+    },
+    menuDivider: {
+        height: 1,
+        backgroundColor: "rgba(148,163,184,0.15)",
+        marginVertical: 4,
     },
 
     // ── Vehicle Health Card ──
