@@ -117,6 +117,15 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
       },
     },
     {
+      id: "obd-issues",
+      icon: "warning-outline",
+      label: "Vehicle Issues",
+      onPress: () => {
+        router.push("OBDIssues");
+        onClose();
+      },
+    },
+    {
       id: "history",
       icon: "time-outline",
       label: "History",
