@@ -21,6 +21,7 @@ import Animated, {
   FadeInUp,
   ZoomIn,
 } from "react-native-reanimated";
+import { useVehicle } from "../contexts/VehicleContext";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -98,14 +99,12 @@ export default function OBDIssues() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const { currentVehicle, clearVehicle } = useVehicle();
   
   // WebSocket state
   const [wsConnected, setWsConnected] = useState(false);
   const ws = useRef(null);
   const reconnectTimeout = useRef(null);
-  
-  // Hardcoded vehicle ID for now (TODO: get from user profile)
-  const VEHICLE_ID = "vehicle-001";
 
   useEffect(() => {
     fetchIncidents();
@@ -129,10 +128,17 @@ export default function OBDIssues() {
     try {
       const token = await getToken();
       
+      // Don't connect if no vehicle is registered
+      if (!currentVehicle) {
+        console.warn('No active vehicle, skipping WebSocket connection');
+        return;
+      }
+      
       // Determine WebSocket protocol based on backend URL
       const wsProtocol = BACKEND_URL.startsWith('https') ? 'wss://' : 'ws://';
       const cleanUrl = BACKEND_URL.replace('http://', '').replace('https://', '');
-      const wsUrl = `${wsProtocol}${cleanUrl}/ws/obd/${VEHICLE_ID}`;
+      // Backend determines vehicle from session, no vehicle_id in URL
+      const wsUrl = `${wsProtocol}${cleanUrl}/ws/obd`;
       
       console.log('Connecting to WebSocket:', wsUrl);
       
@@ -242,6 +248,7 @@ export default function OBDIssues() {
 
   const handleLogout = async () => {
     try {
+      clearVehicle();
       await signOut();
       router.replace("/login");
     } catch (error) {
