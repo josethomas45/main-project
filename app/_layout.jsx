@@ -2,6 +2,7 @@ import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useEffect } from "react";
+import { VehicleProvider } from "../contexts/VehicleContext";
 
 // Token cache for Clerk
 const tokenCache = {
@@ -59,7 +60,9 @@ export default function RootLayout() {
 
   return (
     <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
-      <RootLayoutNav />
+      <VehicleProvider>
+        <RootLayoutNav />
+      </VehicleProvider>
     </ClerkProvider>
   );
 }
