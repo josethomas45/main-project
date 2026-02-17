@@ -17,6 +17,8 @@ export const useVehicleSession = () => {
     try {
       const token = await getToken();
       
+      console.log('📡 Calling GET /vehicle/current...');
+      
       const response = await fetch(`${BACKEND_URL}/vehicle/current`, {
         method: 'GET',
         headers: {
@@ -24,29 +26,35 @@ export const useVehicleSession = () => {
         },
       });
 
+      console.log('📡 Response status:', response.status);
+
       if (response.ok) {
         const vehicle = await response.json();
+        console.log('✅ Vehicle data received:', vehicle);
         return { exists: true, vehicle, error: null };
       }
 
       if (response.status === 404) {
         // No active session - this is expected for new users
+        console.log('ℹ️ No active vehicle session (404)');
         return { exists: false, vehicle: null, error: null };
       }
 
       if (response.status === 401) {
+        console.warn('⚠️ Unauthorized (401)');
         return { exists: false, vehicle: null, error: 'unauthorized' };
       }
 
       // Other errors
       const errorData = await response.json().catch(() => ({}));
+      console.error('❌ API Error:', response.status, errorData);
       return { 
         exists: false, 
         vehicle: null, 
         error: errorData.detail || 'Failed to check vehicle session' 
       };
     } catch (err) {
-      console.error('Check current vehicle error:', err);
+      console.error('❌ Network error:', err);
       return { 
         exists: false, 
         vehicle: null, 

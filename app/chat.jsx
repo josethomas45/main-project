@@ -267,6 +267,7 @@ export default function Chat() {
 
   const flatListRef = useRef(null);
   const msgCounter = useRef(0);
+  const hasShownVehicleModal = useRef(false); // Track if modal was shown
   const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
 
   useEffect(() => {
@@ -280,9 +281,12 @@ export default function Chat() {
   ===================== */
   useEffect(() => {
     // Show vehicle modal if user is signed in but has no vehicle
-    if (isSignedIn && !isCheckingVehicle && !currentVehicle) {
+    if (isSignedIn && !isCheckingVehicle && !currentVehicle && !hasShownVehicleModal.current) {
       setShowVehicleModal(true);
-    } else {
+      hasShownVehicleModal.current = true;
+    } else if (currentVehicle) {
+      // Reset flag when vehicle is registered
+      hasShownVehicleModal.current = false;
       setShowVehicleModal(false);
     }
   }, [isSignedIn, currentVehicle, isCheckingVehicle]);

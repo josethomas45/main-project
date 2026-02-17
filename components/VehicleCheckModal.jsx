@@ -22,51 +22,40 @@ import { checkOBDConnection, detectVehicleInfo } from '../utils/obdService';
  * VehicleCheckModal Component
  * 
  * Blocking modal that guides users through vehicle registration flow:
- * 1. Check for existing vehicle session
- * 2. Check OBD connection
- * 3. Detect VIN
- * 4. Register vehicle with backend
+ * 1. Check OBD connection
+ * 2. Detect VIN
+ * 3. Register vehicle with backend
+ * 
+ * Note: Session checking is handled by VehicleContext before this modal is shown.
+ * This modal only appears when no vehicle session exists.
  */
 export default function VehicleCheckModal({ visible, onComplete }) {
-  const { checkCurrentVehicle, identifyVehicle } = useVehicle();
+  const { identifyVehicle } = useVehicle();
 
   // Flow states
-  const [flowState, setFlowState] = useState('checking_session'); // checking_session, checking_obd, detecting_vin, registering, error, success
-  const [statusMessage, setStatusMessage] = useState('Checking vehicle session...');
+  const [flowState, setFlowState] = useState('checking_obd'); // checking_obd, detecting_vin, registering, error, success
+  const [statusMessage, setStatusMessage] = useState('Checking OBD connection...');
   const [errorMessage, setErrorMessage] = useState(null);
   const [detectedVIN, setDetectedVIN] = useState(null);
   const [detectedModel, setDetectedModel] = useState(null);
 
   useEffect(() => {
     if (visible) {
-      startVehicleCheckFlow();
+      // Reset state and start OBD check
+      // Note: We skip session check because VehicleContext already handles it
+      // This modal only shows when there's NO vehicle, so we go straight to OBD
+      setFlowState('checking_obd');
+      setStatusMessage('Checking OBD connection...');
+      setErrorMessage(null);
+      setDetectedVIN(null);
+      setDetectedModel(null);
+      
+      // Start OBD check after a brief delay to let animations settle
+      setTimeout(() => {
+        checkOBD();
+      }, 500);
     }
   }, [visible]);
-
-  /**
-   * Start the complete vehicle check flow
-   */
-  const startVehicleCheckFlow = async () => {
-    setFlowState('checking_session');
-    setStatusMessage('Checking vehicle session...');
-    setErrorMessage(null);
-
-    // Step 1: Check if user already has an active vehicle session
-    const result = await checkCurrentVehicle();
-    
-    // If vehicle exists, we're done
-    if (result && result.currentVehicle) {
-      setFlowState('success');
-      setStatusMessage('Vehicle session found!');
-      setTimeout(() => {
-        onComplete?.();
-      }, 1000);
-      return;
-    }
-
-    // No session found, proceed to OBD detection
-    await checkOBD();
-  };
 
   /**
    * Check if OBD device is connected
@@ -174,7 +163,6 @@ export default function VehicleCheckModal({ visible, onComplete }) {
    */
   const getStateIcon = () => {
     switch (flowState) {
-      case 'checking_session':
       case 'checking_obd':
       case 'detecting_vin':
       case 'registering':
@@ -189,7 +177,7 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   };
 
   const stateIcon = getStateIcon();
-  const isLoading = ['checking_session', 'checking_obd', 'detecting_vin', 'registering'].includes(flowState);
+  const isLoading = ['checking_obd', 'detecting_vin', 'registering'].includes(flowState);
 
   return (
     <Modal

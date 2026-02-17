@@ -39,30 +39,41 @@ export const VehicleProvider = ({ children }) => {
     try {
       const result = await vehicleSession.checkCurrentVehicle();
 
+      console.log('🚗 Vehicle check result:', result);
+
       if (result.error === 'unauthorized') {
         // Handle unauthorized - user will be redirected to login by Clerk
         setCurrentVehicle(null);
         setError('Session expired. Please login again.');
-        return;
+        setIsCheckingVehicle(false);
+        return result;
       }
 
       if (result.error) {
+        console.warn('Vehicle check error:', result.error);
         setError(result.error);
         setCurrentVehicle(null);
-        return;
+        setIsCheckingVehicle(false);
+        return result;
       }
 
       if (result.exists && result.vehicle) {
+        console.log('✅ Vehicle found:', result.vehicle);
         setCurrentVehicle(result.vehicle);
+        setError(null);
       } else {
+        console.log('❌ No vehicle found');
         setCurrentVehicle(null);
       }
+      
+      setIsCheckingVehicle(false);
+      return result;
     } catch (err) {
-      console.error('Error checking vehicle:', err);
+      console.error('❌ Error checking vehicle:', err);
       setError('Failed to check vehicle session');
       setCurrentVehicle(null);
-    } finally {
       setIsCheckingVehicle(false);
+      return { exists: false, vehicle: null, error: err.message };
     }
   };
 
