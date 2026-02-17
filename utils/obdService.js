@@ -37,7 +37,7 @@ export const detectVIN = async () => {
   const mockVINs = [
     '1HGBH41JXMN109186', // Honda
     '1FTFW1ET5EFA12345', // Ford
-    '5YJSA1E26HF000001', // Tesla
+    '6YJSA1E26HF000001', // Tesla
   ];
   
   const randomVIN = mockVINs[Math.floor(Math.random() * mockVINs.length)];
