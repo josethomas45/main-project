@@ -116,6 +116,15 @@ function Sidebar({ visible, onClose, user, signOut, router, clearVehicle }) {
 
   const menuItems = [
     {
+      id: "dashboard",
+      icon: "home-outline",
+      label: "Dashboard",
+      onPress: () => {
+        router.push("dashboard");
+        onClose();
+      },
+    },
+    {
       id: "maintenance",
       icon: "build-outline",
       label: "Maintenance Tracking",
@@ -258,6 +267,7 @@ export default function Chat() {
   ]);
   const [isSending, setIsSending] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   
   // Voice features state
@@ -448,22 +458,22 @@ export default function Chat() {
         // Check if Voice module is properly initialized
         const available = await Voice.isAvailable();
         setVoiceAvailable(available);
-        
+
         if (available) {
           Voice.onSpeechStart = () => {
             setIsRecording(true);
           };
-          
+
           Voice.onSpeechEnd = () => {
             setIsRecording(false);
           };
-          
+
           Voice.onSpeechResults = (e) => {
             if (e.value && e.value[0]) {
               setMessage(e.value[0]);
             }
           };
-          
+
           Voice.onSpeechError = (e) => {
             console.error('Speech error:', e);
             setIsRecording(false);
@@ -497,8 +507,8 @@ export default function Chat() {
         'Voice recording requires a custom development build. This feature is not available in Expo Go.\n\nAlternatively, you can:\n• Type your message manually\n• Use the web version with browser speech recognition\n• Build a custom development build with: npx expo prebuild',
         [
           { text: 'OK', style: 'default' },
-          { 
-            text: 'Learn More', 
+          {
+            text: 'Learn More',
             onPress: () => console.log('See docs: https://docs.expo.dev/workflow/prebuild/')
           }
         ]
@@ -561,12 +571,12 @@ export default function Chat() {
       }
 
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      
+
       // Clean text for better speech (remove emojis and special formatting)
       const cleanText = text.replace(/[🔍💡🛠️❓⚠️📍]/g, '').trim();
-      
+
       setSpeakingMessageId(messageId);
-      
+
       Speech.speak(cleanText, {
         language: 'en',
         pitch: 1.0,
@@ -674,7 +684,7 @@ export default function Chat() {
                 color={speakingMessageId === item.id ? "#6366f1" : "#94a3b8"}
               />
             </TouchableOpacity>
-            
+
             <Text style={styles.aiText}>
               {parts.map((p, i) =>
                 p.startsWith("http") ? (
@@ -691,7 +701,7 @@ export default function Chat() {
               )}
             </Text>
             <Text style={styles.timestampAi}>{item.timestamp}</Text>
-            
+
             {/* Speaking indicator */}
             {speakingMessageId === item.id && (
               <View style={styles.speakingIndicator}>
@@ -766,7 +776,7 @@ export default function Chat() {
             <Text style={styles.recordingText}>Listening...</Text>
           </Animated.View>
         )}
-        
+
         <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
