@@ -35,6 +35,8 @@ import * as Haptics from "expo-haptics";
 
 import { getDeviceLocation } from "../utils/location";
 import { fetchWorkshops } from "../utils/workshops";
+import VehicleCheckModal from "../components/VehicleCheckModal";
+import { useVehicle } from "../contexts/VehicleContext";
 
 /* =====================
    ENV GUARD
@@ -101,7 +103,7 @@ function formatAIResponse(data) {
 /* =====================
    SIDEBAR COMPONENT (GLASS)
 ===================== */
-function Sidebar({ visible, onClose, user, signOut, router }) {
+function Sidebar({ visible, onClose, user, signOut, router, clearVehicle }) {
   const slideAnim = useRef(new RNAnimated.Value(-SIDEBAR_WIDTH)).current;
 
   useEffect(() => {
@@ -219,6 +221,7 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
             <TouchableOpacity
               style={styles.logoutButton}
               onPress={() => {
+                clearVehicle?.();
                 signOut();
                 onClose();
               }}
@@ -238,10 +241,11 @@ function Sidebar({ visible, onClose, user, signOut, router }) {
    MAIN COMPONENT
 ===================== */
 export default function Chat() {
-  const { signOut, getToken } = useAuth();
+  const { signOut, getToken, isSignedIn } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
+  const { currentVehicle, isCheckingVehicle, clearVehicle } = useVehicle();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -254,6 +258,7 @@ export default function Chat() {
   ]);
   const [isSending, setIsSending] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
   
   // Voice features state
   const [isRecording, setIsRecording] = useState(false);
@@ -269,6 +274,18 @@ export default function Chat() {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  /* =====================
+     VEHICLE CHECK FLOW
+  ===================== */
+  useEffect(() => {
+    // Show vehicle modal if user is signed in but has no vehicle
+    if (isSignedIn && !isCheckingVehicle && !currentVehicle) {
+      setShowVehicleModal(true);
+    } else {
+      setShowVehicleModal(false);
+    }
+  }, [isSignedIn, currentVehicle, isCheckingVehicle]);
 
   /* =====================
      LOAD EXISTING CHAT
@@ -709,7 +726,7 @@ export default function Chat() {
 
         <Text style={styles.headerTitle}>AutoVitals</Text>
 
-        <TouchableOpacity onPress={() => signOut()} style={styles.logoutHeaderButton}>
+        <TouchableOpacity onPress={() => { clearVehicle(); signOut(); }} style={styles.logoutHeaderButton}>
           <Ionicons name="log-out-outline" size={24} color="#f1f5f9" />
         </TouchableOpacity>
       </Animated.View>
@@ -722,6 +739,7 @@ export default function Chat() {
           user={user}
           signOut={signOut}
           router={router}
+          clearVehicle={clearVehicle}
         />
       )}
 
@@ -808,6 +826,12 @@ export default function Chat() {
           </Animated.View>
         </View>
       </Animated.View>
+
+      {/* Vehicle Check Modal */}
+      <VehicleCheckModal 
+        visible={showVehicleModal}
+        onComplete={() => setShowVehicleModal(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
