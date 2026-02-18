@@ -16,7 +16,7 @@ export default function VinCheck() {
   const router = useRouter();
 
   const handleComplete = () => {
-    router.replace("/chat");
+    router.replace("/dashboard");
   };
 
   return (
