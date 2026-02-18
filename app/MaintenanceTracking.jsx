@@ -46,7 +46,7 @@ export default function MaintenanceTracking() {
   const router = useRouter();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
-  const { currentVehicle } = useVehicle();
+  const { currentVehicle, clearVehicle } = useVehicle();
 
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);

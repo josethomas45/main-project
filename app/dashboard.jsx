@@ -2,8 +2,9 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Modal,
     ScrollView,
     StatusBar,
@@ -22,9 +23,28 @@ import Animated, {
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
 
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+// Format a date/string into a relative time label
+function formatRelativeTime(dateStr) {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function Dashboard() {
     const { user } = useUser();
-    const { signOut } = useAuth();
+    const { signOut, getToken } = useAuth();
     const router = useRouter();
     const { currentVehicle } = useVehicle();
 
@@ -36,6 +56,82 @@ export default function Dashboard() {
         : "No Vehicle";
 
     const [showMenu, setShowMenu] = useState(false);
+    const [recentActivity, setRecentActivity] = useState([]);
+    const [activityLoading, setActivityLoading] = useState(true);
+
+    useEffect(() => {
+        const loadActivity = async () => {
+            try {
+                const token = await getToken();
+                const headers = { Authorization: `Bearer ${token}` };
+
+                // Fetch all 3 sources in parallel, fail gracefully
+                const [chatsRes, incidentsRes, maintenanceRes] = await Promise.allSettled([
+                    fetch(`${BACKEND_URL}/chat/history`, { headers }),
+                    fetch(`${BACKEND_URL}/incidents/history`, { headers }),
+                    fetch(`${BACKEND_URL}/maintenance/`, { headers }),
+                ]);
+
+                const items = [];
+
+                if (chatsRes.status === "fulfilled" && chatsRes.value.ok) {
+                    const chats = await chatsRes.value.json();
+                    chats.forEach((c) => items.push({
+                        id: `chat-${c.id}`,
+                        type: "chat",
+                        title: c.title || "Chat conversation",
+                        date: c.created_at,
+                        icon: "chatbubble-outline",
+                        color: "#6366f1",
+                        bgColor: "rgba(99,102,241,0.15)",
+                        onPress: () => router.push({ pathname: "/HistoryPage", params: { chatId: c.id } }),
+                    }));
+                }
+
+                if (incidentsRes.status === "fulfilled" && incidentsRes.value.ok) {
+                    const incidents = await incidentsRes.value.json();
+                    incidents.forEach((inc) => items.push({
+                        id: `inc-${inc.id}`,
+                        type: "incident",
+                        title: inc.trigger_metric
+                            ? inc.trigger_metric.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                            : "Vehicle issue detected",
+                        date: inc.created_at,
+                        icon: "warning-outline",
+                        color: "#ef4444",
+                        bgColor: "rgba(239,68,68,0.15)",
+                        onPress: () => router.push("/OBDIssues"),
+                    }));
+                }
+
+                if (maintenanceRes.status === "fulfilled" && maintenanceRes.value.ok) {
+                    const maintenance = await maintenanceRes.value.json();
+                    maintenance.forEach((m) => items.push({
+                        id: `maint-${m.id}`,
+                        type: "maintenance",
+                        title: m.service_type
+                            ? m.service_type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                            : "Maintenance record",
+                        date: m.service_date || m.created_at,
+                        icon: "build-outline",
+                        color: "#8b5cf6",
+                        bgColor: "rgba(139,92,246,0.15)",
+                        onPress: () => router.push("/MaintenanceTracking"),
+                    }));
+                }
+
+                // Sort newest first, keep top 3
+                items.sort((a, b) => new Date(b.date) - new Date(a.date));
+                setRecentActivity(items.slice(0, 3));
+            } catch (err) {
+                console.error("Failed to load recent activity:", err);
+            } finally {
+                setActivityLoading(false);
+            }
+        };
+
+        loadActivity();
+    }, []);
 
     // Press animation helper
     const createPressAnimation = () => {
@@ -294,49 +390,45 @@ export default function Dashboard() {
                 </Animated.View>
 
 
-                {/* Recent Activity Card (Optional) */}
+                {/* Recent Activity Card */}
                 <Animated.View
                     entering={FadeInUp.duration(700).delay(700)}
                     style={styles.activityCard}
                 >
                     <View style={styles.cardHeader}>
                         <Text style={styles.cardTitle}>Recent Activity</Text>
-                        <TouchableOpacity onPress={() => router.push("/HistoryPage")}>
-                            <Text style={styles.viewAllText}>View All</Text>
-                        </TouchableOpacity>
                     </View>
 
-                    <View style={styles.activityList}>
-                        <View style={styles.activityItem}>
-                            <View style={[styles.activityIcon, { backgroundColor: "rgba(99,102,241,0.15)" }]}>
-                                <Ionicons name="chatbubble-outline" size={18} color="#6366f1" />
-                            </View>
-                            <View style={styles.activityContent}>
-                                <Text style={styles.activityTitle}>Chat conversation</Text>
-                                <Text style={styles.activityTime}>2 hours ago</Text>
-                            </View>
+                    {activityLoading ? (
+                        <View style={styles.activityLoading}>
+                            <ActivityIndicator size="small" color="#6366f1" />
                         </View>
-
-                        <View style={styles.activityItem}>
-                            <View style={[styles.activityIcon, { backgroundColor: "rgba(139,92,246,0.15)" }]}>
-                                <Ionicons name="build-outline" size={18} color="#8b5cf6" />
-                            </View>
-                            <View style={styles.activityContent}>
-                                <Text style={styles.activityTitle}>Oil change scheduled</Text>
-                                <Text style={styles.activityTime}>Yesterday</Text>
-                            </View>
+                    ) : recentActivity.length === 0 ? (
+                        <View style={styles.activityEmpty}>
+                            <Ionicons name="time-outline" size={32} color="#475569" />
+                            <Text style={styles.activityEmptyText}>No recent activity</Text>
                         </View>
-
-                        <View style={styles.activityItem}>
-                            <View style={[styles.activityIcon, { backgroundColor: "rgba(16,185,129,0.15)" }]}>
-                                <Ionicons name="checkmark-circle-outline" size={18} color="#10b981" />
-                            </View>
-                            <View style={styles.activityContent}>
-                                <Text style={styles.activityTitle}>Vehicle health check</Text>
-                                <Text style={styles.activityTime}>3 days ago</Text>
-                            </View>
+                    ) : (
+                        <View style={styles.activityList}>
+                            {recentActivity.map((item) => (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={styles.activityItem}
+                                    onPress={item.onPress}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.activityIcon, { backgroundColor: item.bgColor }]}>
+                                        <Ionicons name={item.icon} size={18} color={item.color} />
+                                    </View>
+                                    <View style={styles.activityContent}>
+                                        <Text style={styles.activityTitle} numberOfLines={1}>{item.title}</Text>
+                                        <Text style={styles.activityTime}>{formatRelativeTime(item.date)}</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={16} color="#475569" />
+                                </TouchableOpacity>
+                            ))}
                         </View>
-                    </View>
+                    )}
                 </Animated.View>
 
                 {/* Footer spacing */}
@@ -633,10 +725,19 @@ const styles = StyleSheet.create({
         shadowRadius: 16,
         elevation: 8,
     },
-    viewAllText: {
+    activityLoading: {
+        paddingVertical: 24,
+        alignItems: "center",
+    },
+    activityEmpty: {
+        paddingVertical: 24,
+        alignItems: "center",
+        gap: 8,
+    },
+    activityEmptyText: {
         fontSize: 14,
-        fontWeight: "600",
-        color: "#a5b4fc",
+        color: "#475569",
+        fontWeight: "500",
     },
     activityList: {
         gap: 14,
