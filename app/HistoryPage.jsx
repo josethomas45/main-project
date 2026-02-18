@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -24,7 +24,13 @@ import Animated, {
   FadeInRight,
   FadeInUp,
   ZoomIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withRepeat,
+  withSequence,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -33,6 +39,18 @@ export default function ChatHistory() {
   const params = useLocalSearchParams();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) =>
+      setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardHeight(0)
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +66,43 @@ export default function ChatHistory() {
 
   // Ref for auto-scroll
   const flatListRef = useRef(null);
+
+  // Send button press animation
+  const scale = useSharedValue(1);
+  const animatedSendButton = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handleSendPress = () => {
+    scale.value = withSpring(0.9, { damping: 10 });
+    setTimeout(() => {
+      scale.value = withSpring(1);
+    }, 100);
+    sendMessage();
+  };
+
+  // Mic animation (pulse while recording)
+  const [isRecording, setIsRecording] = useState(false);
+  const micScale = useSharedValue(1);
+  const micAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: micScale.value }],
+  }));
+
+  // Pulse animation when recording
+  useEffect(() => {
+    if (isRecording) {
+      micScale.value = withRepeat(
+        withSequence(
+          withSpring(1.2, { damping: 2 }),
+          withSpring(1, { damping: 2 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      micScale.value = withSpring(1);
+    }
+  }, [isRecording]);
 
   /* ============================
      LOAD CHAT HISTORY
@@ -476,11 +531,7 @@ export default function ChatHistory() {
         /* ============================
            DETAIL VIEW - CHAT MESSAGES
         ============================ */
-        <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-        >
+        <View style={styles.container}>
           {/* Detail Header */}
           <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
             <TouchableOpacity onPress={handleBackToList} style={styles.headerButton}>
@@ -523,6 +574,7 @@ export default function ChatHistory() {
               renderItem={renderChatMessage}
               contentContainerStyle={styles.messagesContent}
               showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
               ListEmptyComponent={
                 <Animated.View
                   entering={FadeInUp.duration(700).delay(200)}
@@ -541,7 +593,9 @@ export default function ChatHistory() {
           )}
 
           {/* Floating Input Bar (Glass Composer) */}
-          <Animated.View entering={FadeInUp.delay(400).duration(700)} style={styles.inputBarContainer}>
+          <View style={[styles.inputBarContainer, {
+            bottom: insets.bottom + keyboardHeight,
+          }]}>
             <View style={styles.inputBar}>
               <TextInput
                 style={styles.input}
@@ -553,31 +607,59 @@ export default function ChatHistory() {
                 maxLength={500}
               />
 
-              <TouchableOpacity
-                onPress={sendMessage}
-                disabled={isSending || !message.trim()}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={
-                    isSending || !message.trim()
-                      ? ["#475569", "#475569"]
-                      : ["#6366f1", "#8b5cf6"]
-                  }
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.sendButton}
+              {/* Microphone button */}
+              <Animated.View style={micAnimatedStyle}>
+                <TouchableOpacity
+                  onPress={() => setIsRecording((r) => !r)}
+                  activeOpacity={0.7}
+                  style={{ marginRight: 8 }}
                 >
-                  <Ionicons
-                    name={isSending ? "hourglass-outline" : "send"}
-                    size={20}
-                    color="#ffffff"
-                  />
-                </LinearGradient>
-              </TouchableOpacity>
+                  <LinearGradient
+                    colors={
+                      isRecording
+                        ? ["#ef4444", "#dc2626"]
+                        : ["#6366f1", "#8b5cf6"]
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.micButton}
+                  >
+                    <Ionicons
+                      name={isRecording ? "stop" : "mic"}
+                      size={20}
+                      color="#ffffff"
+                    />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
+
+              <Animated.View style={animatedSendButton}>
+                <TouchableOpacity
+                  onPress={handleSendPress}
+                  disabled={isSending || !message.trim()}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={
+                      isSending || !message.trim()
+                        ? ["#475569", "#475569"]
+                        : ["#6366f1", "#8b5cf6"]
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.sendButton}
+                  >
+                    <Ionicons
+                      name={isSending ? "hourglass-outline" : "send"}
+                      size={20}
+                      color="#ffffff"
+                    />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
             </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
+          </View>
+        </View>
       ) : (
         /* ============================
            LIST VIEW - ALL CHATS
@@ -1139,12 +1221,12 @@ const styles = StyleSheet.create({
   // ── Input Bar (Floating Glass Composer) ──
   inputBarContainer: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
+    backgroundColor: "#0f172a",
     paddingHorizontal: 16,
-    paddingBottom: Platform.OS === "ios" ? 32 : 16,
     paddingTop: 12,
+    paddingBottom: 12,
   },
   inputBar: {
     flexDirection: "row",
@@ -1170,6 +1252,18 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  micButton: {
     width: 44,
     height: 44,
     borderRadius: 22,

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -33,6 +33,7 @@ import Animated, {
 import * as Speech from "expo-speech";
 import Voice from "@react-native-voice/voice";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getDeviceLocation } from "../utils/location";
 import { fetchWorkshops } from "../utils/workshops";
@@ -255,6 +256,18 @@ export default function Chat() {
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
   const { clearVehicle } = useVehicle();
+  const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) =>
+      setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardHeight(0)
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -700,11 +713,7 @@ export default function Chat() {
      UI
   ===================== */
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-    >
+    <View style={styles.container}>
       {/* Background gradient */}
       <LinearGradient
         colors={["#1e293b", "#0f172a"]}
@@ -747,10 +756,13 @@ export default function Chat() {
         renderItem={renderMessage}
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
       />
 
       {/* Floating Input Bar (Glass Composer) */}
-      <Animated.View entering={FadeInUp.delay(400).duration(700)} style={styles.inputBarContainer}>
+      <View style={[styles.inputBarContainer, {
+        bottom: insets.bottom + keyboardHeight,
+      }]}>
         {/* Recording indicator */}
         {isRecording && (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.recordingIndicator}>
@@ -821,9 +833,8 @@ export default function Chat() {
             </TouchableOpacity>
           </Animated.View>
         </View>
-      </Animated.View>
-    
-    </KeyboardAvoidingView>
+      </View>
+    </View>
   );
 }
 
@@ -961,9 +972,13 @@ const styles = StyleSheet.create({
 
   // ── Input Bar (Floating Glass Composer) ──
   inputBarContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    backgroundColor: "#0f172a",
     paddingHorizontal: 16,
-    paddingBottom: Platform.OS === "ios" ? 32 : 16,
     paddingTop: 12,
+    paddingBottom: 12,
   },
   inputBar: {
     flexDirection: "row",
