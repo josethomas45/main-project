@@ -33,19 +33,37 @@ function RootLayoutNav() {
 
     const onAuthPage = segments[0] === "login" || segments[0] === "signup";
     const onVinCheck = segments[0] === "vin-check";
-    const atRoot = segments[0] === undefined || segments[0] === "" || segments[0] === "index";
+    const atRoot =
+      segments[0] === undefined ||
+      segments[0] === "" ||
+      segments[0] === "index";
+
+    // Protected app routes — anything that requires sign-in
+    const protectedRoutes = [
+      "chat",
+      "dashboard",
+      "profile",
+      "HistoryPage",
+      "MaintenanceTracking",
+      "OBDIssues",
+      "home",
+      "schedule",
+      "cost-tracking",
+    ];
+    const onProtectedPage = protectedRoutes.includes(segments[0]);
 
     console.log("🔐 Clerk Auth:", { isSignedIn, segments });
 
-    if (!isSignedIn && !onAuthPage && !onVinCheck) {
+    // Defer navigation to next tick so Expo Router's stack has settled
+    if (!isSignedIn && !onAuthPage) {
       // Unauthenticated users must go to login
-      router.replace("/login");
+      setTimeout(() => router.replace("/login"), 0);
     } else if (isSignedIn && onAuthPage) {
       // Authenticated users shouldn't be on login/signup — send to VIN check
-      router.replace("/vin-check");
-    } else if (isSignedIn && atRoot) {
-      // Authenticated users at the root/index — send to VIN check first
-      router.replace("/vin-check");
+      setTimeout(() => router.replace("/vin-check"), 0);
+    } else if (isSignedIn && (atRoot || (!onVinCheck && !onProtectedPage))) {
+      // Authenticated users at root or on an unknown/unmatched route
+      setTimeout(() => router.replace("/vin-check"), 0);
     }
   }, [isSignedIn, isLoaded, segments]);
 
@@ -55,6 +73,7 @@ function RootLayoutNav() {
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }
+
 
 export default function RootLayout() {
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
