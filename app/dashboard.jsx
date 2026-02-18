@@ -20,19 +20,20 @@ import Animated, {
     useSharedValue,
     withSpring,
 } from "react-native-reanimated";
+import { useVehicle } from "../contexts/VehicleContext";
 
 export default function Dashboard() {
     const { user } = useUser();
     const { signOut } = useAuth();
     const router = useRouter();
+    const { currentVehicle } = useVehicle();
 
-    const [vehicleData] = useState({
-        name: "Demo Car",
-        engineStatus: "Healthy",
-        battery: "12.4V",
-        fuelLevel: "65%",
-        lastUpdate: "Just now",
-    });
+    // Derive display name from real vehicle data
+    const vehicleDisplayName = currentVehicle?.model
+        ? currentVehicle.model
+        : currentVehicle?.vin
+        ? `VIN: ${currentVehicle.vin}`
+        : "No Vehicle";
 
     const [showMenu, setShowMenu] = useState(false);
 
@@ -208,7 +209,7 @@ export default function Dashboard() {
                     <View style={styles.badgeLogoutRow}>
                         <View style={styles.vehicleBadge}>
                             <Ionicons name="car-sport" size={16} color="#a5b4fc" />
-                            <Text style={styles.vehicleName}>{vehicleData.name}</Text>
+                            <Text style={styles.vehicleName}>{vehicleDisplayName}</Text>
                         </View>
 
                         <TouchableOpacity

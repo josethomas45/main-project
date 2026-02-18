@@ -1,3 +1,4 @@
+// cache-bust: VehicleCheckModal removed
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,7 +36,6 @@ import * as Haptics from "expo-haptics";
 
 import { getDeviceLocation } from "../utils/location";
 import { fetchWorkshops } from "../utils/workshops";
-import VehicleCheckModal from "../components/VehicleCheckModal";
 import { useVehicle } from "../contexts/VehicleContext";
 
 /* =====================
@@ -250,11 +250,11 @@ function Sidebar({ visible, onClose, user, signOut, router, clearVehicle }) {
    MAIN COMPONENT
 ===================== */
 export default function Chat() {
-  const { signOut, getToken, isSignedIn } = useAuth();
+  const { signOut, getToken } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
-  const { currentVehicle, isCheckingVehicle, clearVehicle } = useVehicle();
+  const { clearVehicle } = useVehicle();
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -267,8 +267,6 @@ export default function Chat() {
   ]);
   const [isSending, setIsSending] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-
-  const [showVehicleModal, setShowVehicleModal] = useState(false);
   
   // Voice features state
   const [isRecording, setIsRecording] = useState(false);
@@ -277,7 +275,6 @@ export default function Chat() {
 
   const flatListRef = useRef(null);
   const msgCounter = useRef(0);
-  const hasShownVehicleModal = useRef(false); // Track if modal was shown
   const genId = () => `msg-${Date.now()}-${++msgCounter.current}`;
 
   useEffect(() => {
@@ -286,22 +283,7 @@ export default function Chat() {
     }, 100);
   }, [messages]);
 
-  /* =====================
-     VEHICLE CHECK FLOW
-  ===================== */
-  useEffect(() => {
-    // Show vehicle modal if user is signed in but has no vehicle
-    if (isSignedIn && !isCheckingVehicle && !currentVehicle && !hasShownVehicleModal.current) {
-      setShowVehicleModal(true);
-      hasShownVehicleModal.current = true;
-    } else if (currentVehicle) {
-      // Reset flag when vehicle is registered
-      hasShownVehicleModal.current = false;
-      setShowVehicleModal(false);
-    }
-  }, [isSignedIn, currentVehicle, isCheckingVehicle]);
-
-  /* =====================
+/* =====================
      LOAD EXISTING CHAT
   ===================== */
   useEffect(() => {
@@ -840,12 +822,7 @@ export default function Chat() {
           </Animated.View>
         </View>
       </Animated.View>
-
-      {/* Vehicle Check Modal */}
-      <VehicleCheckModal 
-        visible={showVehicleModal}
-        onComplete={() => setShowVehicleModal(false)}
-      />
+    
     </KeyboardAvoidingView>
   );
 }

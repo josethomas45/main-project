@@ -31,16 +31,21 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!isLoaded) return;
 
-    const inAuthGroup = segments[0] === "login" || segments[0] === "signup";
+    const onAuthPage = segments[0] === "login" || segments[0] === "signup";
+    const onVinCheck = segments[0] === "vin-check";
+    const atRoot = segments[0] === undefined || segments[0] === "" || segments[0] === "index";
 
-    console.log("🔐 Clerk Auth:", { isSignedIn, inAuthGroup, segments });
+    console.log("🔐 Clerk Auth:", { isSignedIn, segments });
 
-    if (isSignedIn && inAuthGroup) {
-      // Redirect authenticated users away from auth pages
-      router.replace("/chat");
-    } else if (!isSignedIn && !inAuthGroup) {
-      // Redirect unauthenticated users to login
+    if (!isSignedIn && !onAuthPage && !onVinCheck) {
+      // Unauthenticated users must go to login
       router.replace("/login");
+    } else if (isSignedIn && onAuthPage) {
+      // Authenticated users shouldn't be on login/signup — send to VIN check
+      router.replace("/vin-check");
+    } else if (isSignedIn && atRoot) {
+      // Authenticated users at the root/index — send to VIN check first
+      router.replace("/vin-check");
     }
   }, [isSignedIn, isLoaded, segments]);
 

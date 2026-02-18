@@ -29,9 +29,9 @@ import {
   fetchMaintenanceRules,
   updateMaintenance,
 } from "../utils/maintenance";
+import { useVehicle } from "../contexts/VehicleContext";
 
-// DEV ONLY
-const DEV_VEHICLE_ID = "c6df84cb-90e9-4307-9f39-779dcaba9dd3";
+
 
 // helpers
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -45,6 +45,7 @@ export default function MaintenanceTracking() {
   const router = useRouter();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const { currentVehicle } = useVehicle();
 
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -107,7 +108,7 @@ export default function MaintenanceTracking() {
     try {
       await createMaintenance(
         {
-          vehicle_id: DEV_VEHICLE_ID,
+          vehicle_id: currentVehicle?.id,
           service_type: newReminder.service_type,
           service_date: newReminder.service_date,
           odometer_km: selectedRule?.requires_odometer

@@ -35,7 +35,7 @@ export const detectVIN = async () => {
   
   // For now, return a mock VIN (17 characters)
   const mockVINs = [
-    '1HGBH41JXMN109186', // Honda
+    '1rGBH41JXMN109186', // Honda
     '1FTFW1ET5EFA12345', // Ford
     '6YJSA1E26HF000001', // Tesla
   ];
