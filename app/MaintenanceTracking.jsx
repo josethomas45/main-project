@@ -3,11 +3,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -46,7 +48,19 @@ export default function MaintenanceTracking() {
   const router = useRouter();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
-  const { currentVehicle } = useVehicle();
+  const { currentVehicle, clearVehicle, isCheckingVehicle, checkCurrentVehicle } = useVehicle();
+  const vehicleCheckAttempted = useRef(false);
+
+  // Auto-refresh vehicle if it's null (e.g. race condition on app load)
+  useEffect(() => {
+    console.log("MaintenanceTracking: currentVehicle:", currentVehicle);
+    console.log("MaintenanceTracking: isCheckingVehicle:", isCheckingVehicle);
+    if (!currentVehicle && !isCheckingVehicle && !vehicleCheckAttempted.current) {
+      console.log("MaintenanceTracking: currentVehicle is null, re-checking...");
+      vehicleCheckAttempted.current = true;
+      checkCurrentVehicle();
+    }
+  }, [currentVehicle, isCheckingVehicle]);
 
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -107,10 +121,30 @@ export default function MaintenanceTracking() {
       return;
     }
 
+    // Get vehicle ID — try context first, then fetch from backend
+    let vehicleId = currentVehicle?.id;
+    if (!vehicleId) {
+      console.log("handleAddReminder: currentVehicle is null, fetching from backend...");
+      const result = await checkCurrentVehicle();
+      vehicleId = result?.vehicle?.id;
+    }
+
+    if (!vehicleId) {
+      Alert.alert("Error", "No vehicle selected. Please go to Dashboard and ensure a vehicle is active.");
+      return;
+    }
+
     try {
+      console.log("Creating maintenance with:", {
+        vehicle_id: vehicleId,
+        service_type: newReminder.service_type,
+        service_date: newReminder.service_date,
+        odometer_km: selectedRule?.requires_odometer ? Number(newReminder.odometer_km) : null,
+        notes: newReminder.notes || null,
+      });
       await createMaintenance(
         {
-          vehicle_id: currentVehicle?.id,
+          vehicle_id: vehicleId,
           service_type: newReminder.service_type,
           service_date: newReminder.service_date,
           odometer_km: selectedRule?.requires_odometer
@@ -382,17 +416,21 @@ export default function MaintenanceTracking() {
       <Modal
         visible={showAddModal}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={styles.backdropTouchable}
-            activeOpacity={1}
-            onPress={() => setShowAddModal(false)}
-          />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity
+              style={styles.backdropTouchable}
+              activeOpacity={1}
+              onPress={() => setShowAddModal(false)}
+            />
 
-          <Animated.View entering={FadeInUp.duration(500).springify()} style={styles.modalSheet}>
+            <Animated.View entering={FadeInUp.duration(400)} style={styles.modalSheet}>
             <View style={styles.sheetHandle} />
 
             <Text style={styles.modalTitle}>
@@ -491,8 +529,9 @@ export default function MaintenanceTracking() {
                 </LinearGradient>
               </TouchableOpacity>
             </ScrollView>
-          </Animated.View>
-        </View>
+            </Animated.View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Profile Quick Menu – Glass */}
@@ -718,7 +757,7 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: "absolute",
     right: 24,
-    bottom: 32,
+    bottom: 52,
   },
   fab: {
     width: 64,
@@ -779,19 +818,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalSheet: {
-    backgroundColor: "rgba(30,41,59,0.95)",
+    backgroundColor: "rgba(30,41,59,0.98)",
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 40,
-    maxHeight: "88%",
+    minHeight: "55%",
+    maxHeight: "90%",
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
   },
   sheetHandle: {
     width: 40,
