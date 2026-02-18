@@ -91,25 +91,25 @@ export default function Dashboard() {
         {
             icon: "speedometer",
             label: "Engine",
-            value: vehicleData.engineStatus,
+            value: "Normal",
             color: "#10b981",
         },
         {
             icon: "battery-charging",
             label: "Battery",
-            value: vehicleData.battery,
+            value: "Good",
             color: "#6366f1",
         },
         {
             icon: "water",
             label: "Fuel",
-            value: vehicleData.fuelLevel,
+            value: "—",
             color: "#f59e0b",
         },
         {
             icon: "sync",
             label: "Updated",
-            value: vehicleData.lastUpdate,
+            value: "Just now",
             color: "#94a3b8",
         },
     ];
