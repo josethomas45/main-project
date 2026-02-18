@@ -1,8 +1,13 @@
 import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { VehicleProvider } from "../contexts/VehicleContext";
+import {
+  initNotifications,
+  requestNotificationPermissions,
+} from "../utils/notifications";
 
 // Token cache for Clerk
 const tokenCache = {
@@ -27,6 +32,28 @@ function RootLayoutNav() {
   const { isLoaded, isSignedIn } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const notificationResponseListener = useRef();
+
+  // Initialize notifications on mount
+  useEffect(() => {
+    initNotifications();
+    requestNotificationPermissions();
+
+    // Navigate to Maintenance page when a notification is tapped
+    notificationResponseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const screen = response.notification.request.content.data?.screen;
+        if (screen) {
+          router.push(screen);
+        }
+      });
+
+    return () => {
+      if (notificationResponseListener.current) {
+        notificationResponseListener.current.remove();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
