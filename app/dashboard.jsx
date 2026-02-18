@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Modal,
     ScrollView,
     StatusBar,
@@ -46,7 +47,46 @@ export default function Dashboard() {
     const { user } = useUser();
     const { signOut, getToken } = useAuth();
     const router = useRouter();
-    const { currentVehicle } = useVehicle();
+
+    const { currentVehicle, listVehicles, switchVehicle } = useVehicle();
+    const [vehicles, setVehicles] = useState([]);
+    const [loadingVehicles, setLoadingVehicles] = useState(true);
+    const [switchingId, setSwitchingId] = useState(null);
+
+    useEffect(() => {
+        loadVehicles();
+    }, []);
+
+    const loadVehicles = async () => {
+        console.log("DASHBOARD: Loading vehicles...");
+        try {
+            const res = await listVehicles();
+            if (res.success) {
+                setVehicles(res.vehicles);
+            }
+        } catch (error) {
+            console.error("Failed to load vehicles:", error);
+        } finally {
+            setLoadingVehicles(false);
+        }
+    };
+
+    const handleSwitchVehicle = async (vehicleId) => {
+        if (switchingId) return;
+        setSwitchingId(vehicleId);
+        try {
+            const res = await switchVehicle(vehicleId);
+            if (res.success) {
+                // Success toast or alert could go here
+            } else {
+                Alert.alert("Error", res.error || "Failed to switch vehicle");
+            }
+        } catch (error) {
+            Alert.alert("Error", "Failed to switch vehicle");
+        } finally {
+            setSwitchingId(null);
+        }
+    };
 
     // Derive display name from real vehicle data
     const vehicleDisplayName = currentVehicle?.model
@@ -131,7 +171,7 @@ export default function Dashboard() {
         };
 
         loadActivity();
-    }, []);
+    }, [currentVehicle?.id]);
 
     // Press animation helper
     const createPressAnimation = () => {
@@ -182,33 +222,7 @@ export default function Dashboard() {
         },
     ];
 
-    // Vehicle health items
-    const healthItems = [
-        {
-            icon: "speedometer",
-            label: "Engine",
-            value: "Normal",
-            color: "#10b981",
-        },
-        {
-            icon: "battery-charging",
-            label: "Battery",
-            value: "Good",
-            color: "#6366f1",
-        },
-        {
-            icon: "water",
-            label: "Fuel",
-            value: "—",
-            color: "#f59e0b",
-        },
-        {
-            icon: "sync",
-            label: "Updated",
-            value: "Just now",
-            color: "#94a3b8",
-        },
-    ];
+
 
     return (
         <View style={styles.container}>
@@ -363,30 +377,152 @@ export default function Dashboard() {
                     </View>
                 </View>
 
-                {/* Vehicle Health Card (Glass) */}
+                {/* My Vehicles Card */}
                 <Animated.View
                     entering={FadeInUp.duration(700).delay(600)}
-                    style={styles.healthCard}
+                    style={styles.vehicleListCard}
                 >
                     <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>Vehicle Health</Text>
-                        <View style={styles.healthStatusBadge}>
-                            <View style={styles.healthDot} />
-                            <Text style={styles.healthStatusText}>All Good</Text>
-                        </View>
+                        <Text style={styles.cardTitle}>My Vehicles</Text>
+                        <TouchableOpacity onPress={loadVehicles}>
+                            <Ionicons name="refresh" size={20} color="#64748b" />
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={styles.healthGrid}>
-                        {healthItems.map((item, index) => (
-                            <View key={item.label} style={styles.healthItem}>
-                                <View style={[styles.healthIconContainer, { backgroundColor: `${item.color}20` }]}>
-                                    <Ionicons name={item.icon} size={22} color={item.color} />
-                                </View>
-                                <Text style={styles.healthLabel}>{item.label}</Text>
-                                <Text style={styles.healthValue}>{item.value}</Text>
-                            </View>
-                        ))}
-                    </View>
+                    {loadingVehicles ? (
+                        <View style={{ padding: 20, alignItems: "center" }}>
+                            <ActivityIndicator size="small" color="#6366f1" />
+                        </View>
+                    ) : vehicles.length === 0 ? (
+                        <View style={{ padding: 20, alignItems: "center" }}>
+                            <Text style={{ color: "#94a3b8" }}>No vehicles found</Text>
+                        </View>
+                    ) : (
+                        <View style={{ gap: 12 }}>
+                            {vehicles.map((v) => {
+                                const isActive = currentVehicle?.id === v.id;
+                                const isSwitching = switchingId === v.id;
+
+                                return (
+                                    <View
+                                        key={v.id}
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            backgroundColor: isActive
+                                                ? "rgba(16, 185, 129, 0.1)"
+                                                : "rgba(30, 41, 59, 0.4)",
+                                            padding: 12,
+                                            borderRadius: 16,
+                                            borderWidth: 1,
+                                            borderColor: isActive
+                                                ? "rgba(16, 185, 129, 0.2)"
+                                                : "rgba(148, 163, 184, 0.1)",
+                                        }}
+                                    >
+                                        {/* Icon */}
+                                        <View
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 12,
+                                                backgroundColor: isActive
+                                                    ? "rgba(16, 185, 129, 0.2)"
+                                                    : "rgba(99, 102, 241, 0.1)",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                marginRight: 12,
+                                            }}
+                                        >
+                                            <Ionicons
+                                                name="car-sport"
+                                                size={20}
+                                                color={isActive ? "#10b981" : "#6366f1"}
+                                            />
+                                        </View>
+
+                                        {/* Info */}
+                                        <View style={{ flex: 1 }}>
+                                            <Text
+                                                style={{
+                                                    color: "#f1f5f9",
+                                                    fontSize: 15,
+                                                    fontWeight: "600",
+                                                }}
+                                            >
+                                                {v.year} {v.make} {v.model}
+                                            </Text>
+                                            <Text
+                                                style={{
+                                                    color: "#94a3b8",
+                                                    fontSize: 12,
+                                                }}
+                                            >
+                                                {v.vin}
+                                            </Text>
+                                        </View>
+
+                                        {/* Action */}
+                                        {isActive ? (
+                                            <View
+                                                style={{
+                                                    flexDirection: "row",
+                                                    alignItems: "center",
+                                                    backgroundColor: "rgba(16, 185, 129, 0.2)",
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 4,
+                                                    borderRadius: 12,
+                                                    gap: 4,
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name="checkmark-circle"
+                                                    size={14}
+                                                    color="#10b981"
+                                                />
+                                                <Text
+                                                    style={{
+                                                        color: "#10b981",
+                                                        fontSize: 12,
+                                                        fontWeight: "600",
+                                                    }}
+                                                >
+                                                    Active
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            <TouchableOpacity
+                                                onPress={() => handleSwitchVehicle(v.id)}
+                                                disabled={isSwitching || switchingId !== null}
+                                                style={{
+                                                    backgroundColor: "rgba(99, 102, 241, 0.1)",
+                                                    paddingHorizontal: 12,
+                                                    paddingVertical: 6,
+                                                    borderRadius: 12,
+                                                    borderWidth: 1,
+                                                    borderColor: "rgba(99, 102, 241, 0.2)",
+                                                }}
+                                            >
+                                                {isSwitching ? (
+                                                    <ActivityIndicator size="small" color="#6366f1" />
+                                                ) : (
+                                                    <Text
+                                                        style={{
+                                                            color: "#818cf8",
+                                                            fontSize: 12,
+                                                            fontWeight: "600",
+                                                        }}
+                                                    >
+                                                        Switch
+                                                    </Text>
+                                                )}
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    )}
                 </Animated.View>
 
 
@@ -580,14 +716,15 @@ const styles = StyleSheet.create({
         marginVertical: 4,
     },
 
-    // ── Vehicle Health Card ──
-    healthCard: {
-        backgroundColor: "rgba(30,41,59,0.65)",
+
+    // ── My Vehicles List ──
+    vehicleListCard: {
+        backgroundColor: "rgba(30,41,59,0.75)", // Slightly darker/more opaque to differentiate
         borderRadius: 24,
         padding: 20,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: "rgba(148,163,184,0.15)",
+        borderColor: "rgba(99, 102, 241, 0.2)", // Different border color
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
@@ -605,58 +742,6 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         color: "#f1f5f9",
         letterSpacing: 0.3,
-    },
-    healthStatusBadge: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "rgba(16,185,129,0.15)",
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 12,
-        gap: 6,
-    },
-    healthDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: "#10b981",
-    },
-    healthStatusText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: "#10b981",
-    },
-    healthGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 16,
-    },
-    healthItem: {
-        width: "47%",
-        backgroundColor: "rgba(51,65,85,0.4)",
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: "rgba(148,163,184,0.1)",
-    },
-    healthIconContainer: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 12,
-    },
-    healthLabel: {
-        fontSize: 13,
-        color: "#94a3b8",
-        fontWeight: "500",
-        marginBottom: 4,
-    },
-    healthValue: {
-        fontSize: 16,
-        fontWeight: "700",
-        color: "#f1f5f9",
     },
 
     // ── Quick Actions Section ──
