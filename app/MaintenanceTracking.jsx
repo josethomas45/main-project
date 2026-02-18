@@ -31,6 +31,10 @@ import {
   fetchMaintenanceRules,
   updateMaintenance,
 } from "../utils/maintenance";
+import {
+  cancelMaintenanceReminder,
+  scheduleMaintenanceReminder,
+} from "../utils/notifications";
 import { useVehicle } from "../contexts/VehicleContext";
 import Sidebar from "../components/Sidebar";
 
@@ -142,7 +146,7 @@ export default function MaintenanceTracking() {
         odometer_km: selectedRule?.requires_odometer ? Number(newReminder.odometer_km) : null,
         notes: newReminder.notes || null,
       });
-      await createMaintenance(
+      const newRecord = await createMaintenance(
         {
           vehicle_id: vehicleId,
           service_type: newReminder.service_type,
@@ -163,8 +167,24 @@ export default function MaintenanceTracking() {
         odometer_km: "",
       });
 
+      // Schedule notification for next due date
+      const intervalMonths = selectedRule?.interval_months || 6;
+      const serviceDate = new Date(newReminder.service_date);
+      const dueDate = new Date(serviceDate);
+      dueDate.setMonth(dueDate.getMonth() + intervalMonths);
+
+      await scheduleMaintenanceReminder(
+        newReminder.service_type,
+        dueDate,
+        newReminder.notes,
+        newRecord?.id
+      );
+
       await loadReminders();
-      Alert.alert("Success", "Maintenance added");
+      Alert.alert(
+        "Success",
+        `Maintenance added!\nReminder set for ${dueDate.toLocaleDateString()}.`
+      );
     } catch {
       Alert.alert("Error", "Failed to add maintenance");
     }
@@ -233,6 +253,9 @@ export default function MaintenanceTracking() {
           style: "destructive",
           onPress: async () => {
             try {
+              // Cancel any scheduled notification first
+              await cancelMaintenanceReminder(id);
+
               await deleteMaintenance(id, getToken);
               setReminders((prev) => prev.filter((item) => item.id !== id));
               Alert.alert("Deleted", "Maintenance record deleted");
