@@ -7,7 +7,9 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -382,17 +384,21 @@ export default function MaintenanceTracking() {
       <Modal
         visible={showAddModal}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={styles.backdropTouchable}
-            activeOpacity={1}
-            onPress={() => setShowAddModal(false)}
-          />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity
+              style={styles.backdropTouchable}
+              activeOpacity={1}
+              onPress={() => setShowAddModal(false)}
+            />
 
-          <Animated.View entering={FadeInUp.duration(500).springify()} style={styles.modalSheet}>
+            <Animated.View entering={FadeInUp.duration(400)} style={styles.modalSheet}>
             <View style={styles.sheetHandle} />
 
             <Text style={styles.modalTitle}>
@@ -491,8 +497,9 @@ export default function MaintenanceTracking() {
                 </LinearGradient>
               </TouchableOpacity>
             </ScrollView>
-          </Animated.View>
-        </View>
+            </Animated.View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Profile Quick Menu – Glass */}
@@ -779,19 +786,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalSheet: {
-    backgroundColor: "rgba(30,41,59,0.95)",
+    backgroundColor: "rgba(30,41,59,0.98)",
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 40,
-    maxHeight: "88%",
+    minHeight: "55%",
+    maxHeight: "90%",
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
   },
   sheetHandle: {
     width: 40,
