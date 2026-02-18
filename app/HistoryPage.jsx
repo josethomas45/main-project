@@ -31,6 +31,8 @@ import Animated, {
   withSequence,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Sidebar from "../components/Sidebar";
+import { useVehicle } from "../contexts/VehicleContext";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -39,6 +41,7 @@ export default function ChatHistory() {
   const params = useLocalSearchParams();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const { clearVehicle } = useVehicle();
   const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -56,6 +59,7 @@ export default function ChatHistory() {
   const [loading, setLoading] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   // Detail view state
   const [selectedChat, setSelectedChat] = useState(null);
@@ -667,9 +671,15 @@ export default function ChatHistory() {
         <>
           {/* Header */}
           <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+            {/* Sidebar menu button */}
+            <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerButton}>
+              <Ionicons name="menu" size={26} color="#f1f5f9" />
+            </TouchableOpacity>
+            {/* Back button commented out
             <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
               <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
             </TouchableOpacity>
+            */}
 
             <Text style={styles.headerTitle}>Conversations</Text>
 
@@ -812,6 +822,18 @@ export default function ChatHistory() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Sidebar */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+          clearVehicle={clearVehicle}
+        />
+      )}
     </View>
   );
 }
