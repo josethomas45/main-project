@@ -702,7 +702,7 @@ export default function Chat() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       {/* Background gradient */}
@@ -961,10 +961,6 @@ const styles = StyleSheet.create({
 
   // ── Input Bar (Floating Glass Composer) ──
   inputBarContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === "ios" ? 32 : 16,
     paddingTop: 12,
