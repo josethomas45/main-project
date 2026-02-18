@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -48,7 +48,19 @@ export default function MaintenanceTracking() {
   const router = useRouter();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
-  const { currentVehicle, clearVehicle } = useVehicle();
+  const { currentVehicle, clearVehicle, isCheckingVehicle, checkCurrentVehicle } = useVehicle();
+  const vehicleCheckAttempted = useRef(false);
+
+  // Auto-refresh vehicle if it's null (e.g. race condition on app load)
+  useEffect(() => {
+    console.log("MaintenanceTracking: currentVehicle:", currentVehicle);
+    console.log("MaintenanceTracking: isCheckingVehicle:", isCheckingVehicle);
+    if (!currentVehicle && !isCheckingVehicle && !vehicleCheckAttempted.current) {
+      console.log("MaintenanceTracking: currentVehicle is null, re-checking...");
+      vehicleCheckAttempted.current = true;
+      checkCurrentVehicle();
+    }
+  }, [currentVehicle, isCheckingVehicle]);
 
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -109,10 +121,30 @@ export default function MaintenanceTracking() {
       return;
     }
 
+    // Get vehicle ID — try context first, then fetch from backend
+    let vehicleId = currentVehicle?.id;
+    if (!vehicleId) {
+      console.log("handleAddReminder: currentVehicle is null, fetching from backend...");
+      const result = await checkCurrentVehicle();
+      vehicleId = result?.vehicle?.id;
+    }
+
+    if (!vehicleId) {
+      Alert.alert("Error", "No vehicle selected. Please go to Dashboard and ensure a vehicle is active.");
+      return;
+    }
+
     try {
+      console.log("Creating maintenance with:", {
+        vehicle_id: vehicleId,
+        service_type: newReminder.service_type,
+        service_date: newReminder.service_date,
+        odometer_km: selectedRule?.requires_odometer ? Number(newReminder.odometer_km) : null,
+        notes: newReminder.notes || null,
+      });
       await createMaintenance(
         {
-          vehicle_id: currentVehicle?.id,
+          vehicle_id: vehicleId,
           service_type: newReminder.service_type,
           service_date: newReminder.service_date,
           odometer_km: selectedRule?.requires_odometer
