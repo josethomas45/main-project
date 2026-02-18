@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Sidebar from "../components/Sidebar";
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -92,13 +93,14 @@ const formatTime = (timestamp) => {
 
 export default function OBDIssues() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { signOut, getToken } = useAuth();
   const { user } = useUser();
 
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const { currentVehicle, clearVehicle } = useVehicle();
   
   // WebSocket state
@@ -429,9 +431,15 @@ export default function OBDIssues() {
 
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+        {/* Sidebar menu button */}
+        <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerButton}>
+          <Ionicons name="menu" size={26} color="#f1f5f9" />
+        </TouchableOpacity>
+        {/* Back button commented out
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
           <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
         </TouchableOpacity>
+        */}
 
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Vehicle Issues</Text>
@@ -558,6 +566,18 @@ export default function OBDIssues() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Sidebar */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+          clearVehicle={clearVehicle}
+        />
+      )}
     </View>
   );
 }

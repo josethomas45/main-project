@@ -30,6 +30,7 @@ import {
   updateMaintenance,
 } from "../utils/maintenance";
 import { useVehicle } from "../contexts/VehicleContext";
+import Sidebar from "../components/Sidebar";
 
 
 
@@ -54,6 +55,7 @@ export default function MaintenanceTracking() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingReminder, setEditingReminder] = useState(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const [newReminder, setNewReminder] = useState({
     service_type: "",
@@ -286,9 +288,15 @@ export default function MaintenanceTracking() {
 
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+        {/* Sidebar menu button */}
+        <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerButton}>
+          <Ionicons name="menu" size={26} color="#f1f5f9" />
+        </TouchableOpacity>
+        {/* Back button commented out
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
           <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
         </TouchableOpacity>
+        */}
 
         <Text style={styles.headerTitle}>Maintenance</Text>
 
@@ -549,6 +557,18 @@ export default function MaintenanceTracking() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Sidebar */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+          clearVehicle={clearVehicle}
+        />
+      )}
     </View>
   );
 }
