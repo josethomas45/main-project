@@ -171,7 +171,7 @@ export default function Dashboard() {
         };
 
         loadActivity();
-    }, []);
+    }, [currentVehicle?.id]);
 
     // Press animation helper
     const createPressAnimation = () => {
