@@ -222,35 +222,9 @@ export default function Dashboard() {
                     </View>
                 </Animated.View>
 
-                {/* Vehicle Health Card (Glass) */}
-                <Animated.View
-                    entering={FadeInUp.duration(700).delay(200)}
-                    style={styles.healthCard}
-                >
-                    <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>Vehicle Health</Text>
-                        <View style={styles.healthStatusBadge}>
-                            <View style={styles.healthDot} />
-                            <Text style={styles.healthStatusText}>All Good</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.healthGrid}>
-                        {healthItems.map((item, index) => (
-                            <View key={item.label} style={styles.healthItem}>
-                                <View style={[styles.healthIconContainer, { backgroundColor: `${item.color}20` }]}>
-                                    <Ionicons name={item.icon} size={22} color={item.color} />
-                                </View>
-                                <Text style={styles.healthLabel}>{item.label}</Text>
-                                <Text style={styles.healthValue}>{item.value}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </Animated.View>
-
                 {/* Quick Actions Section */}
                 <View style={styles.actionsSection}>
-                    <Animated.View entering={FadeInUp.duration(700).delay(300)}>
+                    <Animated.View entering={FadeInUp.duration(700).delay(200)}>
                         <Text style={styles.sectionTitle}>Quick Actions</Text>
                     </Animated.View>
 
@@ -261,7 +235,7 @@ export default function Dashboard() {
                             return (
                                 <Animated.View
                                     key={action.id}
-                                    entering={FadeInUp.duration(700).delay(400 + index * 80)}
+                                    entering={FadeInUp.duration(700).delay(300 + index * 80)}
                                     style={[styles.actionCardWrapper, animatedStyle]}
                                 >
                                     <TouchableOpacity
@@ -292,6 +266,33 @@ export default function Dashboard() {
                         })}
                     </View>
                 </View>
+
+                {/* Vehicle Health Card (Glass) */}
+                <Animated.View
+                    entering={FadeInUp.duration(700).delay(600)}
+                    style={styles.healthCard}
+                >
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>Vehicle Health</Text>
+                        <View style={styles.healthStatusBadge}>
+                            <View style={styles.healthDot} />
+                            <Text style={styles.healthStatusText}>All Good</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.healthGrid}>
+                        {healthItems.map((item, index) => (
+                            <View key={item.label} style={styles.healthItem}>
+                                <View style={[styles.healthIconContainer, { backgroundColor: `${item.color}20` }]}>
+                                    <Ionicons name={item.icon} size={22} color={item.color} />
+                                </View>
+                                <Text style={styles.healthLabel}>{item.label}</Text>
+                                <Text style={styles.healthValue}>{item.value}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </Animated.View>
+
 
                 {/* Recent Activity Card (Optional) */}
                 <Animated.View
