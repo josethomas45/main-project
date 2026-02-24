@@ -12,13 +12,13 @@
  * @returns {Promise<boolean>} True if OBD device is connected
  */
 export const checkOBDConnection = async () => {
-  // Simulate hardware communication delay
-  await delay(1500);
+  // SIMULATION REMOVED: Hardware communication delay
+  // await delay(1500);
   
   // TODO: Replace with real OBD SDK call
   // Example: return await OBD.isConnected();
   
-  // For now, simulate successful connection after delay
+  // For now, return true immediately to allow flow to proceed
   return true;
 };
 
@@ -27,13 +27,17 @@ export const checkOBDConnection = async () => {
  * @returns {Promise<string>} The detected VIN number
  */
 export const detectVIN = async () => {
-  // Simulate VIN detection delay
-  await delay(2000);
+  // SIMULATION REMOVED: VIN detection delay
+  // await delay(2000);
   
   // TODO: Replace with real OBD SDK call
   // Example: return await OBD.readVIN();
   
-  // For now, return a mock VIN (17 characters)
+  // For now, return a placeholder or wait for real input
+  // The backend will now handle the real data stream via WebSocket
+  return 'PENDING_REAL_VIN';
+  
+  /* 
   const mockVINs = [
     '1rGBH41JXMN109186', // Honda
     '1FTFW1ET5EFA12345', // Ford
@@ -42,6 +46,7 @@ export const detectVIN = async () => {
   
   const randomVIN = mockVINs[Math.floor(Math.random() * mockVINs.length)];
   return randomVIN;
+  */
 };
 
 /**
@@ -49,8 +54,8 @@ export const detectVIN = async () => {
  * @returns {Promise<string|null>} The detected model name, or null if not available
  */
 export const detectModel = async () => {
-  // Simulate model detection delay
-  await delay(1500);
+  // SIMULATION REMOVED: Model detection delay
+  // await delay(1500);
   
   // TODO: Replace with real OBD SDK call
   // Example: return await OBD.readModel();
