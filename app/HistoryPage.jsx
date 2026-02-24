@@ -246,8 +246,12 @@ export default function ChatHistory() {
                 });
                 formatted += "\n";
               }
-              if (typeof parsed.severity === "number") {
-                formatted += `⚠️ Severity: ${Math.round(parsed.severity * 100)}%\n`;
+              if (Array.isArray(parsed.youtube_urls) && parsed.youtube_urls.length > 0) {
+                formatted += "📺 Helpful Videos:\n";
+                parsed.youtube_urls.forEach((url, i) => {
+                  formatted += `${i + 1}. ${url}\n`;
+                });
+                formatted += "\n";
               }
               
               if (formatted.trim()) {
@@ -347,8 +351,13 @@ export default function ChatHistory() {
         });
         aiText += "\n";
       }
-      if (typeof data.severity === "number") {
-        aiText += `⚠️ Severity: ${Math.round(data.severity * 100)}%\n`;
+
+      if (Array.isArray(data.youtube_urls) && data.youtube_urls.length > 0) {
+        aiText += "📺 Helpful Videos:\n";
+        data.youtube_urls.forEach((url, i) => {
+          aiText += `${i + 1}. ${url}\n`;
+        });
+        aiText += "\n";
       }
 
       const aiMsg = {

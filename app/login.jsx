@@ -120,7 +120,11 @@ export default function Login() {
                   animatedGoogleStyle,
                 ]}
               >
-                <Ionicons name="logo-google" size={22} color="#4285F4" />
+                <Ionicons
+                  name="logo-google"
+                  size={18}
+                  color="#4285F4"
+                />
                 <Text style={styles.googleButtonText}>
                   {loading ? "Signing in…" : "Continue with Google"}
                 </Text>
@@ -145,7 +149,11 @@ export default function Login() {
               activeOpacity={0.75}
             // onPress={() => router.push("/(auth)/email-signin")}
             >
-              <Ionicons name="mail-outline" size={20} color="#526D82" />
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color="#526D82"
+              />
               <Text style={styles.emailButtonText}>Sign in with email</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -261,7 +269,7 @@ const styles = StyleSheet.create({
     fontSize: 16.5,
     fontWeight: "600",
     color: "#1f2a44",
-    marginLeft: 12,
+    marginLeft: 3,
   },
 
   dividerRow: {
@@ -297,7 +305,7 @@ const styles = StyleSheet.create({
     fontSize: 16.5,
     fontWeight: "600",
     color: "#526D82",
-    marginLeft: 10,
+    marginLeft: 2,
   },
 
   footer: {
