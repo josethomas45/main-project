@@ -23,6 +23,7 @@ import Animated, {
   ZoomIn,
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
+import { registerBluetoothBridge } from "../utils/obdService";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -155,6 +156,9 @@ export default function OBDIssues() {
           type: 'auth', 
           token 
         }));
+
+        // Register Bluetooth bridge to start streaming telemetry
+        registerBluetoothBridge(ws.current);
       };
       
       ws.current.onmessage = (event) => {
