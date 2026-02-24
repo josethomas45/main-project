@@ -25,7 +25,11 @@
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
-      ]
+      ],
+      "gradleProperties": {
+        "android.useAndroidX": "true",
+        "android.enableJetifier": "true"
+      }
     },
     "web": {
       "output": "static",
@@ -61,6 +65,12 @@
             "central"
           ],
           "bluetoothAlwaysPermission": "Allow AutoVitals to connect to your OBD sensor."
+        }
+      ],
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "Allow AutoVitals to access the microphone for voice commands."
         }
       ]
     ],
