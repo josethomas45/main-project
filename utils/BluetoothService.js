@@ -56,21 +56,27 @@ class BluetoothService {
   }
 
   /**
-   * Get list of already-paired Bluetooth devices
-   * ELM327 devices usually show up as paired after initial pairing via Android settings
+   * Get list of already-paired Bluetooth devices.
+   * ELM327 devices show up here after initial pairing via Android Settings.
    */
   async getPairedDevices() {
     try {
       const paired = await RNBluetoothClassic.getBondedDevices();
+      console.log('[BT] Paired devices:', paired?.length, paired?.map(d => `${d.name}(${d.address})`));
       return paired || [];
     } catch (err) {
-      console.error('Error getting paired devices:', err);
+      console.error('[BT] Error getting paired devices:', err);
       return [];
     }
   }
 
   /**
-   * Start discovery for unpaired Bluetooth Classic devices
+   * Start discovery for new (unpaired) Bluetooth Classic devices.
+   * IMPORTANT: startDiscovery() is a blocking call that resolves once
+   * discovery finishes (~12s). Use it in the background, not awaited.
+   * 
+   * @param {Function} onDeviceFound - callback(device) for each discovered device
+   * @returns {Promise<BluetoothDevice[]>} resolves with all discovered devices when done
    */
   async startDiscovery(onDeviceFound) {
     const hasPermission = await this.requestPermissions();
@@ -86,27 +92,32 @@ class BluetoothService {
     this.isScanning = true;
 
     try {
-      // Listen for discovered devices
-      const subscription = RNBluetoothClassic.onDeviceDiscovered((device) => {
-        if (device && device.name) {
+      // Set up listener for real-time discovery events (fires as each device is found)
+      this._discoverySubscription = RNBluetoothClassic.onDeviceDiscovered((device) => {
+        console.log('[BT] Discovered device:', device?.name, device?.address);
+        if (device && onDeviceFound) {
           onDeviceFound(device);
         }
       });
 
-      // Start discovery
-      await RNBluetoothClassic.startDiscovery();
-
-      // Stop after 12 seconds
-      setTimeout(async () => {
-        await this.stopDiscovery();
-        if (subscription) subscription.remove();
-      }, 12000);
-
-      return subscription;
+      // startDiscovery() returns a promise that resolves with ALL discovered
+      // devices when discovery completes (after ~12 seconds).
+      console.log('[BT] Starting discovery...');
+      const discoveredDevices = await RNBluetoothClassic.startDiscovery();
+      console.log('[BT] Discovery complete, found:', discoveredDevices?.length);
+      
+      this.isScanning = false;
+      return discoveredDevices || [];
     } catch (err) {
       this.isScanning = false;
-      console.error('Discovery error:', err);
-      throw err;
+      console.error('[BT] Discovery error:', err);
+      // Don't re-throw — discovery failures shouldn't block the flow
+      return [];
+    } finally {
+      if (this._discoverySubscription) {
+        this._discoverySubscription.remove();
+        this._discoverySubscription = null;
+      }
     }
   }
 
@@ -120,20 +131,25 @@ class BluetoothService {
     } catch (err) {
       // Ignore — may not be discovering
     }
+    if (this._discoverySubscription) {
+      this._discoverySubscription.remove();
+      this._discoverySubscription = null;
+    }
   }
 
   /**
-   * Connect to a Bluetooth Classic device (ELM327 via SPP)
+   * Connect to a Bluetooth Classic device (ELM327 via SPP).
+   * The library's connectToDevice returns a BluetoothDevice wrapper.
    */
   async connect(device) {
     try {
       await this.stopDiscovery();
 
       const address = device.address || device.id;
-      console.log(`Connecting to ${device.name} (${address})...`);
+      console.log(`[BT] Connecting to ${device.name} (${address})...`);
 
       const connected = await RNBluetoothClassic.connectToDevice(address, {
-        delimiter: '>',       // ELM327 uses '>' as prompt
+        delimiter: '\r',       // ELM327 terminates with carriage return
         charset: 'ascii',
       });
 
@@ -146,10 +162,10 @@ class BluetoothService {
       // Set up data listener
       this.setupDataListener();
 
-      console.log(`Connected to ${device.name}`);
+      console.log(`[BT] Connected to ${device.name}`);
       return true;
     } catch (error) {
-      console.error('Connection error:', error);
+      console.error('[BT] Connection error:', error);
       this.connectedDevice = null;
       throw error;
     }
@@ -169,6 +185,7 @@ class BluetoothService {
 
     this.dataSubscription = this.connectedDevice.onDataReceived((event) => {
       const data = event.data;
+      console.log('[BT] Data received:', data);
       if (this.onDataCallback && data) {
         this.onDataCallback(data);
       }
@@ -181,6 +198,7 @@ class BluetoothService {
   async initializeOBD() {
     if (!this.connectedDevice) return;
 
+    console.log('[BT] Initializing ELM327...');
     const initCommands = [
       'ATZ',     // Reset
       'ATE0',    // Echo off
@@ -190,10 +208,15 @@ class BluetoothService {
     ];
 
     for (const cmd of initCommands) {
-      await this.sendCommand(cmd);
-      // Wait for ELM327 to process each command
-      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        await this.sendCommand(cmd);
+        // Wait for ELM327 to process each command
+        await new Promise((r) => setTimeout(r, 1000));
+      } catch (err) {
+        console.warn(`[BT] Init command "${cmd}" failed:`, err);
+      }
     }
+    console.log('[BT] ELM327 initialization complete');
   }
 
   /**
@@ -201,7 +224,7 @@ class BluetoothService {
    */
   async sendCommand(command) {
     if (!this.connectedDevice) {
-      console.warn('No connected device, cannot send command');
+      console.warn('[BT] No connected device, cannot send command');
       return null;
     }
 
@@ -210,7 +233,7 @@ class BluetoothService {
       const cmdStr = command.endsWith('\r') ? command : command + '\r';
       await this.connectedDevice.write(cmdStr, 'ascii');
     } catch (err) {
-      console.error(`Error sending command "${command}":`, err);
+      console.error(`[BT] Error sending command "${command}":`, err);
       throw err;
     }
   }
@@ -246,7 +269,7 @@ class BluetoothService {
       try {
         await this.connectedDevice.disconnect();
       } catch (err) {
-        console.warn('Disconnect error:', err);
+        console.warn('[BT] Disconnect error:', err);
       }
       this.connectedDevice = null;
     }

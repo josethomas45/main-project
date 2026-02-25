@@ -62,7 +62,8 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   }, [visible]);
 
   /**
-   * Load paired devices first, then start discovery for new ones
+   * Load paired devices first, then start discovery for new ones.
+   * Discovery runs in the background so paired devices appear instantly.
    */
   const loadDevices = async () => {
     setFlowState('scanning');
@@ -82,24 +83,37 @@ export default function VehicleCheckModal({ visible, onComplete }) {
         return;
       }
 
-      // 2) Show already-paired devices (ELM327 usually appears here)
+      // 2) Request permissions
+      const hasPermission = await BluetoothService.requestPermissions();
+      if (!hasPermission) {
+        setFlowState('error');
+        setErrorMessage('Bluetooth permissions not granted');
+        setStatusMessage('Please grant Bluetooth permissions');
+        setIsScanning(false);
+        return;
+      }
+
+      // 3) Show already-paired devices (ELM327 usually appears here)
       const paired = await BluetoothService.getPairedDevices();
       if (paired.length > 0) {
         setDevices(paired);
       }
 
-      // 3) Also start discovery for unpaired devices
-      await BluetoothService.startDiscovery((device) => {
+      // 4) Fire discovery in the BACKGROUND — do NOT await
+      //    startDiscovery() blocks for ~12s until complete
+      BluetoothService.startDiscovery((device) => {
         setDevices(prev => {
-          if (prev.find(d => (d.address || d.id) === (device.address || device.id))) return prev;
+          const addr = device.address || device.id;
+          if (prev.find(d => (d.address || d.id) === addr)) return prev;
           return [...prev, device];
         });
+      }).then(() => {
+        setIsScanning(false);
+      }).catch((err) => {
+        console.warn('Discovery error (non-critical):', err);
+        setIsScanning(false);
       });
 
-      // When discovery finishes (after timeout), update scanning state
-      setTimeout(() => {
-        setIsScanning(false);
-      }, 13000);
     } catch (err) {
       console.error('Device scan error:', err);
       setIsScanning(false);
@@ -292,23 +306,45 @@ export default function VehicleCheckModal({ visible, onComplete }) {
               <Animated.View entering={FadeInDown} style={styles.deviceListContainer}>
                 {devices.length === 0 ? (
                   <View style={styles.emptyContainer}>
-                    <ActivityIndicator size="small" color="#94a3b8" />
-                    <Text style={styles.emptyText}>Looking for devices...</Text>
+                    {isScanning ? (
+                      <>
+                        <ActivityIndicator size="small" color="#94a3b8" />
+                        <Text style={styles.emptyText}>Looking for devices...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="bluetooth-outline" size={24} color="#94a3b8" />
+                        <Text style={styles.emptyText}>No devices found</Text>
+                        <TouchableOpacity onPress={() => loadDevices()} style={{ marginTop: 8 }}>
+                          <Text style={{ color: '#6366f1', fontWeight: '600', fontSize: 14 }}>Scan Again</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 ) : (
-                  devices.map((device) => (
-                    <TouchableOpacity
-                      key={device.id}
-                      style={styles.deviceItem}
-                      onPress={() => connectToDevice(device)}
-                    >
-                      <View style={styles.deviceInfo}>
-                        <Ionicons name="bluetooth" size={20} color="#6366f1" />
-                        <Text style={styles.deviceName}>{device.name}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color="#475569" />
-                    </TouchableOpacity>
-                  ))
+                  <>
+                    {devices.map((device) => (
+                      <TouchableOpacity
+                        key={device.address || device.id || device.name}
+                        style={styles.deviceItem}
+                        onPress={() => connectToDevice(device)}
+                      >
+                        <View style={styles.deviceInfo}>
+                          <Ionicons name="bluetooth" size={20} color="#6366f1" />
+                          <View>
+                            <Text style={styles.deviceName}>{device.name || 'Unknown Device'}</Text>
+                            <Text style={{ color: '#64748b', fontSize: 11 }}>{device.address}</Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#475569" />
+                      </TouchableOpacity>
+                    ))}
+                    {!isScanning && (
+                      <TouchableOpacity onPress={() => loadDevices()} style={{ alignSelf: 'center', padding: 8, marginTop: 4 }}>
+                        <Text style={{ color: '#6366f1', fontWeight: '600', fontSize: 13 }}>Scan Again</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
                 )}
               </Animated.View>
             )}
