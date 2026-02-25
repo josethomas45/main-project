@@ -7,10 +7,10 @@
 import BluetoothService from './BluetoothService';
 
 /**
- * Checks if an OBD device is currently connected via Bluetooth
+ * Checks if an OBD device is currently connected via Bluetooth Classic
  */
 export const checkOBDConnection = async () => {
-  return BluetoothService.connectedDevice !== null;
+  return await BluetoothService.isConnected();
 };
 
 /**

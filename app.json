@@ -24,7 +24,9 @@
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "gradleProperties": {
         "android.useAndroidX": "true",
@@ -57,14 +59,12 @@
         }
       ],
       [
-        "react-native-ble-plx",
+        "with-rn-bluetooth-classic",
         {
-          "isBackgroundEnabled": false,
-          "modes": [
-            "peripheral",
-            "central"
-          ],
-          "bluetoothAlwaysPermission": "Allow AutoVitals to connect to your OBD sensor."
+          "peripheralUsageDescription": "Allow AutoVitals to connect to your OBD sensor.",
+          "protocols": [
+            "com.autovitals.obd"
+          ]
         }
       ],
       [

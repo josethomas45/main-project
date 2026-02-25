@@ -17,7 +17,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import { useVehicle } from '../contexts/VehicleContext';
-import { checkOBDConnection, detectVehicleInfo } from '../utils/obdService';
+import { detectVehicleInfo } from '../utils/obdService';
 import BluetoothService from '../utils/BluetoothService';
 
 /**
@@ -45,81 +45,80 @@ export default function VehicleCheckModal({ visible, onComplete }) {
 
   useEffect(() => {
     if (visible) {
-      // Reset state and start OBD check
-      setFlowState('checking_obd');
-      setStatusMessage('Checking OBD connection...');
+      // Reset state and start scanning
+      setFlowState('scanning');
+      setStatusMessage('Looking for OBD Devices...');
       setErrorMessage(null);
       setDetectedVIN(null);
       setDetectedModel(null);
       setManualVIN('');
+      setDevices([]);
       
-      // Start OBD check after a brief delay to let animations settle
+      // Start by listing paired devices, then discover new ones
       setTimeout(() => {
-        checkOBD();
+        loadDevices();
       }, 500);
     }
   }, [visible]);
 
   /**
-   * Check if OBD device is connected
+   * Load paired devices first, then start discovery for new ones
    */
-  const checkOBD = async () => {
-    setFlowState('checking_obd');
-    setStatusMessage('Checking OBD connection...');
+  const loadDevices = async () => {
+    setFlowState('scanning');
+    setStatusMessage('Looking for OBD Devices...');
     setErrorMessage(null);
+    setIsScanning(true);
+    setDevices([]);
 
     try {
-      const isConnected = await checkOBDConnection();
-
-      if (!isConnected) {
+      // 1) Check if Bluetooth is on
+      const btEnabled = await BluetoothService.isBluetoothEnabled();
+      if (!btEnabled) {
         setFlowState('error');
-        setErrorMessage('OBD device not connected');
-        setStatusMessage('Please connect your OBD device to continue');
+        setErrorMessage('Bluetooth is turned off');
+        setStatusMessage('Please enable Bluetooth to continue');
+        setIsScanning(false);
         return;
       }
 
-      // OBD connected (hardware bridge check), proceed to scanning
-      await scanForDevices();
+      // 2) Show already-paired devices (ELM327 usually appears here)
+      const paired = await BluetoothService.getPairedDevices();
+      if (paired.length > 0) {
+        setDevices(paired);
+      }
+
+      // 3) Also start discovery for unpaired devices
+      await BluetoothService.startDiscovery((device) => {
+        setDevices(prev => {
+          if (prev.find(d => (d.address || d.id) === (device.address || device.id))) return prev;
+          return [...prev, device];
+        });
+      });
+
+      // When discovery finishes (after timeout), update scanning state
+      setTimeout(() => {
+        setIsScanning(false);
+      }, 13000);
     } catch (err) {
-      console.error('OBD check error:', err);
+      console.error('Device scan error:', err);
+      setIsScanning(false);
       setFlowState('error');
-      setErrorMessage('Failed to check OBD connection');
+      setErrorMessage(err.message || 'Failed to scan for Bluetooth devices');
       setStatusMessage('Please try again');
     }
   };
 
-  /**
-   * Scan for Bluetooth OBD devices
-   */
-  const scanForDevices = async () => {
-    setFlowState('scanning');
-    setStatusMessage('Scanning for OBD Devices...');
-    setDevices([]);
-    setIsScanning(true);
-    setErrorMessage(null);
 
-    try {
-      await BluetoothService.startScan((device) => {
-        setDevices(prev => {
-          if (prev.find(d => d.id === device.id)) return prev;
-          return [...prev, device];
-        });
-      });
-    } catch (err) {
-      console.error('Scan error:', err);
-      setFlowState('error');
-      setErrorMessage(err.message || 'Failed to scan for Bluetooth devices');
-    }
-  };
 
   /**
    * Connect to a specific device
    */
   const connectToDevice = async (device) => {
     setFlowState('connecting');
-    setStatusMessage(`Connecting to ${device.name}...`);
+    setStatusMessage(`Connecting to ${device.name || 'device'}...`);
     setIsScanning(false);
-    BluetoothService.stopScan();
+    await BluetoothService.stopDiscovery();
 
     try {
       await BluetoothService.connect(device);
@@ -214,8 +213,8 @@ export default function VehicleCheckModal({ visible, onComplete }) {
    */
   const handleRetry = () => {
     if (flowState === 'error') {
-      // Restart from OBD check
-      checkOBD();
+      // Restart from device scanning
+      loadDevices();
     }
   };
 
@@ -224,7 +223,6 @@ export default function VehicleCheckModal({ visible, onComplete }) {
    */
   const getStateIcon = () => {
     switch (flowState) {
-      case 'checking_obd':
       case 'scanning':
       case 'connecting':
       case 'detecting_vin':
@@ -242,7 +240,7 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   };
 
   const stateIcon = getStateIcon();
-  const isLoading = ['checking_obd', 'detecting_vin', 'registering'].includes(flowState);
+  const isLoading = ['detecting_vin', 'registering'].includes(flowState);
 
   return (
     <Modal
@@ -351,7 +349,7 @@ export default function VehicleCheckModal({ visible, onComplete }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  onPress={() => checkOBD()}
+                  onPress={() => loadDevices()}
                   style={styles.retryDetectionButton}
                 >
                   <Text style={styles.retryDetectionText}>Retry Detection</Text>
@@ -395,9 +393,9 @@ export default function VehicleCheckModal({ visible, onComplete }) {
             )}
 
             {/* Info text */}
-            {flowState === 'checking_obd' && (
+            {flowState === 'scanning' && (
               <Text style={styles.infoText}>
-                Make sure your OBD device is properly connected to the vehicle
+                Make sure your OBD device is plugged in and Bluetooth is on
               </Text>
             )}
           </Animated.View>
