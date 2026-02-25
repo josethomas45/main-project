@@ -174,7 +174,8 @@ class BluetoothService {
 
   /**
    * Initialize ELM327 with AT commands.
-   * Uses sendCommandWithResponse() to properly wait for each response.
+   * Kept to bare minimum — many ELM327 clones drop the BT
+   * connection when receiving reset commands (ATZ, ATD, AT WS).
    */
   async initializeOBD() {
     if (!this.connectedDevice) {
@@ -184,32 +185,23 @@ class BluetoothService {
 
     console.log('[BT] Initializing ELM327...');
 
-    // DO NOT send ATZ — it performs a full hardware reset on many
-    // ELM327 clones, which kills the Bluetooth connection.
-    // Instead use AT D (defaults) + config commands.
+    // Wait for BT link to stabilize before sending commands
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Only send the essentials — no resets of any kind
     const initCommands = [
-      { cmd: 'ATD',  desc: 'Set defaults' },
       { cmd: 'ATE0', desc: 'Echo off' },
-      { cmd: 'ATL0', desc: 'Linefeeds off' },
-      { cmd: 'ATS1', desc: 'Spaces on' },
-      { cmd: 'ATH0', desc: 'Headers off' },
       { cmd: 'ATSP0', desc: 'Protocol auto' },
     ];
 
     for (const { cmd, desc } of initCommands) {
       try {
-        const resp = await this.sendCommandWithResponse(cmd, 3000);
+        const resp = await this.sendCommandWithResponse(cmd, 4000);
         console.log(`[BT] ${cmd} (${desc}):`, resp);
       } catch (err) {
-        console.warn(`[BT] ${cmd} failed:`, err);
+        console.warn(`[BT] ${cmd} failed (non-critical):`, err.message);
       }
-      await new Promise(r => setTimeout(r, 300));
-    }
-
-    // Verify we're still connected after init
-    const stillConnected = await this.isConnected();
-    if (!stillConnected) {
-      throw new Error('Connection lost during initialization');
+      await new Promise(r => setTimeout(r, 500));
     }
 
     console.log('[BT] ✅ ELM327 initialization complete');
