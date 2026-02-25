@@ -184,22 +184,14 @@ class BluetoothService {
 
     console.log('[BT] Initializing ELM327...');
 
-    // ATZ needs extra time — the ELM327 resets and sends its version string
-    try {
-      console.log('[BT] Sending ATZ (reset)...');
-      const resetResponse = await this.sendCommandWithResponse('ATZ', 6000);
-      console.log('[BT] ATZ response:', resetResponse);
-    } catch (err) {
-      console.warn('[BT] ATZ failed:', err);
-    }
-
-    // Wait after reset
-    await new Promise(r => setTimeout(r, 1500));
-
+    // DO NOT send ATZ — it performs a full hardware reset on many
+    // ELM327 clones, which kills the Bluetooth connection.
+    // Instead use AT D (defaults) + config commands.
     const initCommands = [
+      { cmd: 'ATD',  desc: 'Set defaults' },
       { cmd: 'ATE0', desc: 'Echo off' },
       { cmd: 'ATL0', desc: 'Linefeeds off' },
-      { cmd: 'ATS0', desc: 'Spaces off' },
+      { cmd: 'ATS1', desc: 'Spaces on' },
       { cmd: 'ATH0', desc: 'Headers off' },
       { cmd: 'ATSP0', desc: 'Protocol auto' },
     ];
@@ -211,8 +203,13 @@ class BluetoothService {
       } catch (err) {
         console.warn(`[BT] ${cmd} failed:`, err);
       }
-      // Small delay between commands
       await new Promise(r => setTimeout(r, 300));
+    }
+
+    // Verify we're still connected after init
+    const stillConnected = await this.isConnected();
+    if (!stillConnected) {
+      throw new Error('Connection lost during initialization');
     }
 
     console.log('[BT] ✅ ELM327 initialization complete');
