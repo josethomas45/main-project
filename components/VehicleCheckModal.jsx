@@ -135,15 +135,21 @@ export default function VehicleCheckModal({ visible, onComplete }) {
     await BluetoothService.stopDiscovery();
 
     try {
+      // Step 1: Bluetooth connect
       await BluetoothService.connect(device);
+      setStatusMessage('Initializing OBD sensor...');
+
+      // Step 2: Initialize ELM327 (ATZ, ATE0, etc.)
       await BluetoothService.initializeOBD();
+      setStatusMessage('Reading vehicle info...');
       
-      // Successfully connected, proceed to VIN detection
+      // Step 3: Detect VIN automatically
       await detectVIN();
     } catch (err) {
       console.error('Connection error:', err);
       setFlowState('error');
-      setErrorMessage(`Failed to connect to ${device.name}`);
+      setErrorMessage(`Failed to connect: ${err.message || 'Unknown error'}`);
+      setStatusMessage('Connection failed');
     }
   };
 

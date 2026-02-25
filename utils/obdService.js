@@ -48,61 +48,72 @@ export const detectVIN = async () => {
 /**
  * Parse the ELM327 response for VIN (Mode 09 PID 02).
  * 
- * Typical response (multi-line):
- *   49 02 01 57 46 30 58 58
- *   49 02 02 58 58 58 58 58
- *   49 02 03 58 58 58 58 58
- *   49 02 04 58 58
- * 
- * Or single-line:
- *   49 02 01 57 46 30 58 58 58 58 58 ...
+ * Handles both formats:
+ *   With spaces: "49 02 01 57 46 30 58 58"
+ *   Without spaces (ATS0): "490201574630585858"
  */
 function parseVINResponse(response) {
   try {
-    // Remove header bytes and extract hex data
-    const lines = response.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let hexBytes = [];
+    console.log('[OBD] Raw VIN response:', JSON.stringify(response));
+
+    // Split into lines, filter out empty and non-data lines
+    const lines = response
+      .split(/[\r\n]+/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('SEARCHING') && !l.startsWith('0902'));
+
+    let vinHex = [];
 
     for (const line of lines) {
-      // Remove any non-hex chars and split into pairs
-      const clean = line.replace(/\r/g, '').trim();
-      const parts = clean.split(/\s+/);
-
-      for (const part of parts) {
-        // Skip header bytes (49, 02, sequence number)
-        // and non-hex tokens
-        if (/^[0-9A-Fa-f]{2}$/.test(part)) {
-          hexBytes.push(part);
+      // Normalize: split into 2-char hex pairs
+      let hexPairs;
+      if (line.includes(' ')) {
+        // Spaced format: "49 02 01 57 46 30"
+        hexPairs = line.split(/\s+/).filter(p => /^[0-9A-Fa-f]{2}$/i.test(p));
+      } else {
+        // No-spaces format: "490201574630"
+        hexPairs = [];
+        const clean = line.replace(/[^0-9A-Fa-f]/g, '');
+        for (let j = 0; j < clean.length; j += 2) {
+          if (j + 2 <= clean.length) {
+            hexPairs.push(clean.substring(j, j + 2));
+          }
         }
       }
-    }
 
-    // Remove the leading "49 02 XX" header pattern
-    // Find where the actual VIN bytes start
-    let vinHex = [];
-    let i = 0;
-    while (i < hexBytes.length) {
-      if (hexBytes[i] === '49' && hexBytes[i + 1] === '02' && i + 2 < hexBytes.length) {
-        // Skip "49 02 <seq>" header (3 bytes)
-        i += 3;
+      if (hexPairs.length < 3) continue;
+
+      // Check if line starts with "49 02" header
+      if (hexPairs[0].toUpperCase() === '49' && hexPairs[1].toUpperCase() === '02') {
+        // Skip header: 49, 02, and the sequence byte
+        vinHex.push(...hexPairs.slice(3));
       } else {
-        vinHex.push(hexBytes[i]);
-        i++;
+        // No header, treat all as data
+        vinHex.push(...hexPairs);
       }
     }
 
     // Convert hex to ASCII
     const vin = vinHex
-      .map(h => String.fromCharCode(parseInt(h, 16)))
+      .map(h => {
+        const code = parseInt(h, 16);
+        return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '';
+      })
       .join('')
       .replace(/[^A-Z0-9]/gi, ''); // Keep only valid VIN chars
+
+    console.log('[OBD] Parsed VIN hex:', vinHex.join(' '), '→', vin);
 
     if (vin.length >= 17) {
       return vin.substring(0, 17);
     }
 
-    console.warn('[OBD] VIN too short:', vin, '(', vin.length, 'chars)');
-    return vin.length > 0 ? vin : null;
+    if (vin.length > 0) {
+      console.warn('[OBD] VIN too short:', vin, `(${vin.length} chars, need 17)`);
+      return vin; // Return partial VIN — let caller decide
+    }
+
+    return null;
   } catch (err) {
     console.error('[OBD] VIN parse error:', err);
     return null;
@@ -168,21 +179,30 @@ export const readDTCs = async () => {
 
 /**
  * Parse Mode 03 response into DTC codes.
- * Response format: "43 XX YY XX YY ..." where each XX YY = one DTC
+ * Handles both spaced ("43 01 03 00 00") and no-spaces ("4301030000") formats.
  */
 function parseDTCResponse(response) {
   try {
     const codes = [];
-    // Strip lines and collect hex bytes
-    const allHex = response
-      .replace(/[\r\n]/g, ' ')
-      .split(/\s+/)
-      .filter(p => /^[0-9A-Fa-f]{2}$/.test(p));
+    
+    // Normalize response into hex pairs
+    const cleaned = response.replace(/[\r\n]/g, ' ').trim();
+    let allHex;
+    
+    if (cleaned.includes(' ')) {
+      allHex = cleaned.split(/\s+/).filter(p => /^[0-9A-Fa-f]{2}$/i.test(p));
+    } else {
+      allHex = [];
+      const hex = cleaned.replace(/[^0-9A-Fa-f]/g, '');
+      for (let j = 0; j < hex.length; j += 2) {
+        if (j + 2 <= hex.length) allHex.push(hex.substring(j, j + 2));
+      }
+    }
 
     let i = 0;
     while (i < allHex.length) {
       // Skip the "43" header byte (Mode 03 response prefix)
-      if (allHex[i] === '43') {
+      if (allHex[i].toUpperCase() === '43') {
         i++;
         continue;
       }

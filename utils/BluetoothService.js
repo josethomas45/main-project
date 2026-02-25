@@ -7,6 +7,7 @@ class BluetoothService {
     this.isScanning = false;
     this.onDataCallback = null;
     this.dataSubscription = null;
+    this._commandInProgress = false;
   }
 
   /**
@@ -24,10 +25,11 @@ class BluetoothService {
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ]);
-          return (
+          const allGranted = 
             granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-            granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED
-          );
+            granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED;
+          console.log('[BT] Permissions granted:', allGranted);
+          return allGranted;
         } else {
           // Android < 12
           const granted = await PermissionsAndroid.request(
@@ -36,7 +38,7 @@ class BluetoothService {
           return granted === PermissionsAndroid.RESULTS.GRANTED;
         }
       } catch (err) {
-        console.warn('Permission request error:', err);
+        console.warn('[BT] Permission request error:', err);
         return false;
       }
     }
@@ -50,7 +52,7 @@ class BluetoothService {
     try {
       return await RNBluetoothClassic.isBluetoothEnabled();
     } catch (err) {
-      console.error('Bluetooth check error:', err);
+      console.error('[BT] Bluetooth check error:', err);
       return false;
     }
   }
@@ -72,11 +74,7 @@ class BluetoothService {
 
   /**
    * Start discovery for new (unpaired) Bluetooth Classic devices.
-   * IMPORTANT: startDiscovery() is a blocking call that resolves once
-   * discovery finishes (~12s). Use it in the background, not awaited.
-   * 
-   * @param {Function} onDeviceFound - callback(device) for each discovered device
-   * @returns {Promise<BluetoothDevice[]>} resolves with all discovered devices when done
+   * startDiscovery() blocks until discovery finishes (~12s).
    */
   async startDiscovery(onDeviceFound) {
     const hasPermission = await this.requestPermissions();
@@ -92,7 +90,6 @@ class BluetoothService {
     this.isScanning = true;
 
     try {
-      // Set up listener for real-time discovery events (fires as each device is found)
       this._discoverySubscription = RNBluetoothClassic.onDeviceDiscovered((device) => {
         console.log('[BT] Discovered device:', device?.name, device?.address);
         if (device && onDeviceFound) {
@@ -100,8 +97,6 @@ class BluetoothService {
         }
       });
 
-      // startDiscovery() returns a promise that resolves with ALL discovered
-      // devices when discovery completes (after ~12 seconds).
       console.log('[BT] Starting discovery...');
       const discoveredDevices = await RNBluetoothClassic.startDiscovery();
       console.log('[BT] Discovery complete, found:', discoveredDevices?.length);
@@ -111,7 +106,6 @@ class BluetoothService {
     } catch (err) {
       this.isScanning = false;
       console.error('[BT] Discovery error:', err);
-      // Don't re-throw — discovery failures shouldn't block the flow
       return [];
     } finally {
       if (this._discoverySubscription) {
@@ -139,17 +133,19 @@ class BluetoothService {
 
   /**
    * Connect to a Bluetooth Classic device (ELM327 via SPP).
-   * The library's connectToDevice returns a BluetoothDevice wrapper.
+   * NOTE: Does NOT set up a permanent data listener — that's done
+   * lazily via setDataCallback() to avoid conflicts with
+   * sendCommandWithResponse().
    */
   async connect(device) {
     try {
       await this.stopDiscovery();
 
       const address = device.address || device.id;
-      console.log(`[BT] Connecting to ${device.name} (${address})...`);
+      console.log(`[BT] Connecting to ${device.name || 'Unknown'} (${address})...`);
 
       const connected = await RNBluetoothClassic.connectToDevice(address, {
-        delimiter: '\r',       // ELM327 terminates with carriage return
+        delimiter: '\r',
         charset: 'ascii',
       });
 
@@ -158,69 +154,153 @@ class BluetoothService {
       }
 
       this.connectedDevice = connected;
+      console.log(`[BT] ✅ Connected to ${device.name || address}`);
 
-      // Set up data listener
-      this.setupDataListener();
+      // Verify the connection is actually open
+      const isConn = await connected.isConnected();
+      console.log(`[BT] Connection verified: ${isConn}`);
+      if (!isConn) {
+        this.connectedDevice = null;
+        throw new Error('Device connected but isConnected() returned false');
+      }
 
-      console.log(`[BT] Connected to ${device.name}`);
       return true;
     } catch (error) {
-      console.error('[BT] Connection error:', error);
+      console.error('[BT] ❌ Connection error:', error);
       this.connectedDevice = null;
       throw error;
     }
   }
 
   /**
-   * Listen for incoming data from the ELM327
+   * Initialize ELM327 with AT commands.
+   * Uses sendCommandWithResponse() to properly wait for each response.
    */
-  setupDataListener() {
-    if (!this.connectedDevice) return;
+  async initializeOBD() {
+    if (!this.connectedDevice) {
+      console.warn('[BT] No device to initialize');
+      return;
+    }
 
-    // Remove any existing subscription
+    console.log('[BT] Initializing ELM327...');
+
+    // ATZ needs extra time — the ELM327 resets and sends its version string
+    try {
+      console.log('[BT] Sending ATZ (reset)...');
+      const resetResponse = await this.sendCommandWithResponse('ATZ', 6000);
+      console.log('[BT] ATZ response:', resetResponse);
+    } catch (err) {
+      console.warn('[BT] ATZ failed:', err);
+    }
+
+    // Wait after reset
+    await new Promise(r => setTimeout(r, 1500));
+
+    const initCommands = [
+      { cmd: 'ATE0', desc: 'Echo off' },
+      { cmd: 'ATL0', desc: 'Linefeeds off' },
+      { cmd: 'ATS0', desc: 'Spaces off' },
+      { cmd: 'ATH0', desc: 'Headers off' },
+      { cmd: 'ATSP0', desc: 'Protocol auto' },
+    ];
+
+    for (const { cmd, desc } of initCommands) {
+      try {
+        const resp = await this.sendCommandWithResponse(cmd, 3000);
+        console.log(`[BT] ${cmd} (${desc}):`, resp);
+      } catch (err) {
+        console.warn(`[BT] ${cmd} failed:`, err);
+      }
+      // Small delay between commands
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    console.log('[BT] ✅ ELM327 initialization complete');
+  }
+
+  /**
+   * Send command and wait for the complete response.
+   * Collects data until ELM327 '>' prompt or timeout.
+   * 
+   * During command execution, the permanent data listener is paused
+   * to prevent it from consuming response data.
+   */
+  async sendCommandWithResponse(command, timeoutMs = 5000) {
+    if (!this.connectedDevice) {
+      throw new Error('No connected device');
+    }
+
+    // Wait if another command is in progress (serial queue)
+    while (this._commandInProgress) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    this._commandInProgress = true;
+
+    // Pause permanent data listener during command
+    const hadPermanentListener = !!this.dataSubscription;
     if (this.dataSubscription) {
       this.dataSubscription.remove();
       this.dataSubscription = null;
     }
 
-    this.dataSubscription = this.connectedDevice.onDataReceived((event) => {
-      const data = event.data;
-      console.log('[BT] Data received:', data);
-      if (this.onDataCallback && data) {
-        this.onDataCallback(data);
-      }
-    });
-  }
+    try {
+      return await new Promise(async (resolve, reject) => {
+        let responseBuffer = '';
+        let tempSubscription = null;
+        let timer = null;
 
-  /**
-   * Initialize ELM327 with AT commands
-   */
-  async initializeOBD() {
-    if (!this.connectedDevice) return;
+        const cleanup = () => {
+          if (timer) clearTimeout(timer);
+          if (tempSubscription) {
+            tempSubscription.remove();
+            tempSubscription = null;
+          }
+        };
 
-    console.log('[BT] Initializing ELM327...');
-    const initCommands = [
-      'ATZ',     // Reset
-      'ATE0',    // Echo off
-      'ATL1',    // Linefeeds on
-      'ATS0',    // Spaces off (cleaner parsing)
-      'ATSP0',   // Protocol auto-detect
-    ];
+        // Listen for response data
+        tempSubscription = this.connectedDevice.onDataReceived((event) => {
+          const chunk = event.data || '';
+          responseBuffer += chunk;
 
-    for (const cmd of initCommands) {
-      try {
-        await this.sendCommand(cmd);
-        // Wait for ELM327 to process each command
-        await new Promise((r) => setTimeout(r, 1000));
-      } catch (err) {
-        console.warn(`[BT] Init command "${cmd}" failed:`, err);
+          // ELM327 sends '>' when ready for next command
+          if (responseBuffer.includes('>')) {
+            cleanup();
+            const response = responseBuffer.replace(/>/g, '').trim();
+            console.log(`[BT] << "${command}" =>`, response);
+            resolve(response);
+          }
+        });
+
+        // Timeout
+        timer = setTimeout(() => {
+          cleanup();
+          const response = responseBuffer.trim();
+          console.warn(`[BT] ⏱ "${command}" timed out (${timeoutMs}ms). Got:`, response);
+          resolve(response); // Return what we have
+        }, timeoutMs);
+
+        // Send the command
+        try {
+          const cmdStr = command.endsWith('\r') ? command : command + '\r';
+          await this.connectedDevice.write(cmdStr, 'ascii');
+          console.log(`[BT] >> Sent: "${command}"`);
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      });
+    } finally {
+      this._commandInProgress = false;
+
+      // Restore permanent data listener if it was active
+      if (hadPermanentListener && this.onDataCallback) {
+        this._setupPermanentListener();
       }
     }
-    console.log('[BT] ELM327 initialization complete');
   }
 
   /**
-   * Send an AT or OBD command to the device (fire and forget)
+   * Send fire-and-forget command (no response expected)
    */
   async sendCommand(command) {
     if (!this.connectedDevice) {
@@ -238,69 +318,31 @@ class BluetoothService {
   }
 
   /**
-   * Send command and wait for the complete response.
-   * Collects data until ELM327 '>' prompt or timeout.
-   * 
-   * @param {string} command - AT or OBD command
-   * @param {number} timeoutMs - max wait time (default 5000ms)
-   * @returns {string} the full response text
-   */
-  async sendCommandWithResponse(command, timeoutMs = 5000) {
-    if (!this.connectedDevice) {
-      throw new Error('No connected device');
-    }
-
-    return new Promise(async (resolve, reject) => {
-      let responseBuffer = '';
-      let tempSubscription = null;
-      let timer = null;
-
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        if (tempSubscription) {
-          tempSubscription.remove();
-          tempSubscription = null;
-        }
-      };
-
-      // Temporarily listen for data
-      tempSubscription = this.connectedDevice.onDataReceived((event) => {
-        const chunk = event.data || '';
-        responseBuffer += chunk;
-
-        // ELM327 sends '>' when ready for next command
-        if (responseBuffer.includes('>')) {
-          cleanup();
-          const response = responseBuffer.replace(/>/g, '').trim();
-          console.log(`[BT] Response for "${command}":`, response);
-          resolve(response);
-        }
-      });
-
-      // Timeout
-      timer = setTimeout(() => {
-        cleanup();
-        console.warn(`[BT] Command "${command}" timed out. Buffer:`, responseBuffer);
-        // Return whatever we have even on timeout
-        resolve(responseBuffer.trim());
-      }, timeoutMs);
-
-      // Send the command
-      try {
-        const cmdStr = command.endsWith('\r') ? command : command + '\r';
-        await this.connectedDevice.write(cmdStr, 'ascii');
-      } catch (err) {
-        cleanup();
-        reject(err);
-      }
-    });
-  }
-
-  /**
-   * Set callback for incoming data
+   * Set callback for incoming data (for raw bridge / telemetry).
+   * Sets up a permanent listener that forwards data to the callback.
+   * The listener is automatically paused during sendCommandWithResponse().
    */
   setDataCallback(callback) {
     this.onDataCallback = callback;
+
+    if (callback && this.connectedDevice) {
+      this._setupPermanentListener();
+    }
+  }
+
+  /**
+   * Internal: set up the permanent data listener
+   */
+  _setupPermanentListener() {
+    if (this.dataSubscription) {
+      this.dataSubscription.remove();
+    }
+    this.dataSubscription = this.connectedDevice.onDataReceived((event) => {
+      const data = event.data;
+      if (this.onDataCallback && data) {
+        this.onDataCallback(data);
+      }
+    });
   }
 
   /**
