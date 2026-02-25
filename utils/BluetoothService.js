@@ -220,7 +220,7 @@ class BluetoothService {
   }
 
   /**
-   * Send an AT or OBD command to the device
+   * Send an AT or OBD command to the device (fire and forget)
    */
   async sendCommand(command) {
     if (!this.connectedDevice) {
@@ -229,13 +229,71 @@ class BluetoothService {
     }
 
     try {
-      // ELM327 expects commands terminated with \r
       const cmdStr = command.endsWith('\r') ? command : command + '\r';
       await this.connectedDevice.write(cmdStr, 'ascii');
     } catch (err) {
       console.error(`[BT] Error sending command "${command}":`, err);
       throw err;
     }
+  }
+
+  /**
+   * Send command and wait for the complete response.
+   * Collects data until ELM327 '>' prompt or timeout.
+   * 
+   * @param {string} command - AT or OBD command
+   * @param {number} timeoutMs - max wait time (default 5000ms)
+   * @returns {string} the full response text
+   */
+  async sendCommandWithResponse(command, timeoutMs = 5000) {
+    if (!this.connectedDevice) {
+      throw new Error('No connected device');
+    }
+
+    return new Promise(async (resolve, reject) => {
+      let responseBuffer = '';
+      let tempSubscription = null;
+      let timer = null;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        if (tempSubscription) {
+          tempSubscription.remove();
+          tempSubscription = null;
+        }
+      };
+
+      // Temporarily listen for data
+      tempSubscription = this.connectedDevice.onDataReceived((event) => {
+        const chunk = event.data || '';
+        responseBuffer += chunk;
+
+        // ELM327 sends '>' when ready for next command
+        if (responseBuffer.includes('>')) {
+          cleanup();
+          const response = responseBuffer.replace(/>/g, '').trim();
+          console.log(`[BT] Response for "${command}":`, response);
+          resolve(response);
+        }
+      });
+
+      // Timeout
+      timer = setTimeout(() => {
+        cleanup();
+        console.warn(`[BT] Command "${command}" timed out. Buffer:`, responseBuffer);
+        // Return whatever we have even on timeout
+        resolve(responseBuffer.trim());
+      }, timeoutMs);
+
+      // Send the command
+      try {
+        const cmdStr = command.endsWith('\r') ? command : command + '\r';
+        await this.connectedDevice.write(cmdStr, 'ascii');
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    });
   }
 
   /**

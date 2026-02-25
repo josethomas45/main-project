@@ -23,7 +23,7 @@ import Animated, {
   ZoomIn,
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
-import { registerBluetoothBridge } from "../utils/obdService";
+import { registerBluetoothBridge, startTelemetryLoop, stopTelemetryLoop } from "../utils/obdService";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -115,6 +115,7 @@ export default function OBDIssues() {
     
     // Cleanup on unmount
     return () => {
+      stopTelemetryLoop();
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
       }
@@ -157,8 +158,11 @@ export default function OBDIssues() {
           token 
         }));
 
-        // Register Bluetooth bridge to start streaming telemetry
+        // Register Bluetooth bridge for raw data passthrough
         registerBluetoothBridge(ws.current);
+
+        // Start structured telemetry polling (RPM, speed, temp, etc.)
+        startTelemetryLoop(ws.current);
       };
       
       ws.current.onmessage = (event) => {
@@ -178,6 +182,7 @@ export default function OBDIssues() {
       ws.current.onclose = () => {
         console.log('WebSocket disconnected');
         setWsConnected(false);
+        stopTelemetryLoop();
         
         // Auto-reconnect after 5 seconds
         reconnectTimeout.current = setTimeout(() => {

@@ -1,50 +1,349 @@
 /**
  * OBD Service Layer
  * 
- * Provides an abstraction for OBD device communication, bridging Bluetooth
- * hardware data to the backend via WebSocket.
+ * Provides VIN detection, DTC reading, live telemetry polling,
+ * and WebSocket bridging for real-time vehicle diagnostics.
  */
 import BluetoothService from './BluetoothService';
 
-/**
- * Checks if an OBD device is currently connected via Bluetooth Classic
- */
+// ─── Connection Check ───────────────────────────────────────
+
 export const checkOBDConnection = async () => {
   return await BluetoothService.isConnected();
 };
 
+// ─── VIN Detection (OBD Mode 09, PID 02) ────────────────────
+
 /**
- * Returns null to trigger manual VIN entry in the UI
+ * Read VIN from the ELM327 using OBD PID 09 02.
+ * Response format: "49 02 01 XX XX XX XX XX ..." (hex ASCII)
+ * 
+ * @returns {string|null} 17-character VIN or null
  */
 export const detectVIN = async () => {
-  return null;
+  try {
+    const connected = await BluetoothService.isConnected();
+    if (!connected) {
+      console.warn('[OBD] Cannot detect VIN — not connected');
+      return null;
+    }
+
+    console.log('[OBD] Requesting VIN (09 02)...');
+    const response = await BluetoothService.sendCommandWithResponse('09 02', 8000);
+
+    if (!response || response.includes('NO DATA') || response.includes('ERROR') || response.includes('UNABLE')) {
+      console.warn('[OBD] VIN request returned no data:', response);
+      return null;
+    }
+
+    const vin = parseVINResponse(response);
+    console.log('[OBD] Detected VIN:', vin);
+    return vin;
+  } catch (err) {
+    console.error('[OBD] VIN detection error:', err);
+    return null;
+  }
 };
 
 /**
- * Returns null as model detection is handled by backend or manual entry
+ * Parse the ELM327 response for VIN (Mode 09 PID 02).
+ * 
+ * Typical response (multi-line):
+ *   49 02 01 57 46 30 58 58
+ *   49 02 02 58 58 58 58 58
+ *   49 02 03 58 58 58 58 58
+ *   49 02 04 58 58
+ * 
+ * Or single-line:
+ *   49 02 01 57 46 30 58 58 58 58 58 ...
+ */
+function parseVINResponse(response) {
+  try {
+    // Remove header bytes and extract hex data
+    const lines = response.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let hexBytes = [];
+
+    for (const line of lines) {
+      // Remove any non-hex chars and split into pairs
+      const clean = line.replace(/\r/g, '').trim();
+      const parts = clean.split(/\s+/);
+
+      for (const part of parts) {
+        // Skip header bytes (49, 02, sequence number)
+        // and non-hex tokens
+        if (/^[0-9A-Fa-f]{2}$/.test(part)) {
+          hexBytes.push(part);
+        }
+      }
+    }
+
+    // Remove the leading "49 02 XX" header pattern
+    // Find where the actual VIN bytes start
+    let vinHex = [];
+    let i = 0;
+    while (i < hexBytes.length) {
+      if (hexBytes[i] === '49' && hexBytes[i + 1] === '02' && i + 2 < hexBytes.length) {
+        // Skip "49 02 <seq>" header (3 bytes)
+        i += 3;
+      } else {
+        vinHex.push(hexBytes[i]);
+        i++;
+      }
+    }
+
+    // Convert hex to ASCII
+    const vin = vinHex
+      .map(h => String.fromCharCode(parseInt(h, 16)))
+      .join('')
+      .replace(/[^A-Z0-9]/gi, ''); // Keep only valid VIN chars
+
+    if (vin.length >= 17) {
+      return vin.substring(0, 17);
+    }
+
+    console.warn('[OBD] VIN too short:', vin, '(', vin.length, 'chars)');
+    return vin.length > 0 ? vin : null;
+  } catch (err) {
+    console.error('[OBD] VIN parse error:', err);
+    return null;
+  }
+}
+
+/**
+ * Returns null as model detection is handled by backend
  */
 export const detectModel = async () => {
   return null;
 };
 
 /**
- * Detects both VIN and model (currently both null to force manual setup)
+ * Detect VIN (and model if possible)
  */
 export const detectVehicleInfo = async () => {
-  return { vin: null, model: null };
+  const vin = await detectVIN();
+  return { vin, model: null };
+};
+
+// ─── DTC Reading (OBD Mode 03) ──────────────────────────────
+
+/**
+ * DTC first-byte category mapping:
+ *   0x = P0xxx, 1x = P1xxx, 2x = P2xxx, 3x = P3xxx
+ *   4x = C0xxx, 5x = C1xxx, 6x = C2xxx, 7x = C3xxx
+ *   8x = B0xxx, 9x = B1xxx, Ax = B2xxx, Bx = B3xxx
+ *   Cx = U0xxx, Dx = U1xxx, Ex = U2xxx, Fx = U3xxx
+ */
+const DTC_CATEGORIES = {
+  '0': 'P0', '1': 'P1', '2': 'P2', '3': 'P3',
+  '4': 'C0', '5': 'C1', '6': 'C2', '7': 'C3',
+  '8': 'B0', '9': 'B1', 'A': 'B2', 'B': 'B3',
+  'C': 'U0', 'D': 'U1', 'E': 'U2', 'F': 'U3',
 };
 
 /**
- * Bridge Bluetooth data to Backend WebSocket
- * This allows the backend to process raw ELM327 data in real-time.
+ * Read stored DTCs from the vehicle.
+ * Sends Mode 03 and parses the response into standard codes.
  * 
- * @param {WebSocket} ws The active WebSocket connection to the backend
+ * @returns {string[]} e.g. ['P0301', 'P0420', 'C0123']
+ */
+export const readDTCs = async () => {
+  try {
+    const connected = await BluetoothService.isConnected();
+    if (!connected) return [];
+
+    console.log('[OBD] Requesting DTCs (03)...');
+    const response = await BluetoothService.sendCommandWithResponse('03', 6000);
+
+    if (!response || response.includes('NO DATA') || response.includes('ERROR')) {
+      console.log('[OBD] No DTCs stored');
+      return [];
+    }
+
+    return parseDTCResponse(response);
+  } catch (err) {
+    console.error('[OBD] DTC read error:', err);
+    return [];
+  }
+};
+
+/**
+ * Parse Mode 03 response into DTC codes.
+ * Response format: "43 XX YY XX YY ..." where each XX YY = one DTC
+ */
+function parseDTCResponse(response) {
+  try {
+    const codes = [];
+    // Strip lines and collect hex bytes
+    const allHex = response
+      .replace(/[\r\n]/g, ' ')
+      .split(/\s+/)
+      .filter(p => /^[0-9A-Fa-f]{2}$/.test(p));
+
+    let i = 0;
+    while (i < allHex.length) {
+      // Skip the "43" header byte (Mode 03 response prefix)
+      if (allHex[i] === '43') {
+        i++;
+        continue;
+      }
+
+      // Each DTC is 2 bytes
+      if (i + 1 < allHex.length) {
+        const byte1 = allHex[i].toUpperCase();
+        const byte2 = allHex[i + 1].toUpperCase();
+
+        // Skip 00 00 (no code)
+        if (byte1 === '00' && byte2 === '00') {
+          i += 2;
+          continue;
+        }
+
+        const firstNibble = byte1[0]; // Category
+        const rest = byte1[1] + byte2; // 3 remaining digits
+        const prefix = DTC_CATEGORIES[firstNibble] || 'P0';
+        const code = prefix + rest;
+
+        codes.push(code);
+        i += 2;
+      } else {
+        break;
+      }
+    }
+
+    console.log('[OBD] Parsed DTCs:', codes);
+    return codes;
+  } catch (err) {
+    console.error('[OBD] DTC parse error:', err);
+    return [];
+  }
+}
+
+// ─── Telemetry Polling ──────────────────────────────────────
+
+/**
+ * Common OBD PIDs for live telemetry
+ */
+const TELEMETRY_PIDS = [
+  { pid: '01 0C', name: 'rpm',          parse: (a, b) => ((a * 256) + b) / 4 },
+  { pid: '01 0D', name: 'speed',        parse: (a) => a },        // km/h
+  { pid: '01 05', name: 'coolant_temp', parse: (a) => a - 40 },  // °C
+  { pid: '01 04', name: 'engine_load',  parse: (a) => (a / 255) * 100 }, // %
+  { pid: '01 0B', name: 'intake_pressure', parse: (a) => a },    // kPa
+  { pid: '01 0F', name: 'intake_temp',  parse: (a) => a - 40 },  // °C
+];
+
+let _telemetryInterval = null;
+let _dtcCheckCounter = 0;
+
+/**
+ * Parse a standard OBD Mode 01 response.
+ * Response format: "41 XX AA BB" where AA BB are data bytes.
+ */
+function parseOBDResponse(response) {
+  if (!response) return null;
+  const hex = response
+    .replace(/[\r\n]/g, ' ')
+    .split(/\s+/)
+    .filter(p => /^[0-9A-Fa-f]{2}$/.test(p));
+
+  // Skip the "41 XX" header (2 bytes) — the rest are data bytes
+  if (hex.length >= 3 && hex[0] === '41') {
+    return hex.slice(2).map(h => parseInt(h, 16));
+  }
+  return null;
+}
+
+/**
+ * Start polling OBD telemetry and forwarding to WebSocket.
+ * Also checks for DTCs every ~30 seconds.
+ * 
+ * @param {WebSocket} ws - The WebSocket connection to the backend
+ * @param {number} intervalMs - Poll interval (default 2000ms)
+ */
+export const startTelemetryLoop = (ws, intervalMs = 2000) => {
+  stopTelemetryLoop(); // Clear any existing loop
+  _dtcCheckCounter = 0;
+
+  console.log('[OBD] Starting telemetry loop...');
+
+  _telemetryInterval = setInterval(async () => {
+    try {
+      const connected = await BluetoothService.isConnected();
+      if (!connected) {
+        console.warn('[OBD] Device disconnected, stopping telemetry');
+        stopTelemetryLoop();
+        return;
+      }
+
+      const telemetry = {};
+
+      // Poll each PID
+      for (const { pid, name, parse } of TELEMETRY_PIDS) {
+        try {
+          const response = await BluetoothService.sendCommandWithResponse(pid, 3000);
+          if (response && !response.includes('NO DATA') && !response.includes('ERROR')) {
+            const bytes = parseOBDResponse(response);
+            if (bytes && bytes.length > 0) {
+              telemetry[name] = parse(...bytes);
+            }
+          }
+        } catch {
+          // Skip failed PIDs silently
+        }
+      }
+
+      // Send telemetry to WebSocket
+      if (ws && ws.readyState === 1 && Object.keys(telemetry).length > 0) {
+        ws.send(JSON.stringify({
+          type: 'obd_telemetry',
+          data: telemetry,
+          timestamp: new Date().toISOString(),
+        }));
+      }
+
+      // Check DTCs periodically (~every 30s = 15 intervals at 2s)
+      _dtcCheckCounter++;
+      if (_dtcCheckCounter >= 15) {
+        _dtcCheckCounter = 0;
+        const dtcs = await readDTCs();
+        if (dtcs.length > 0 && ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({
+            type: 'obd_dtc',
+            codes: dtcs,
+            timestamp: new Date().toISOString(),
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('[OBD] Telemetry loop error:', err);
+    }
+  }, intervalMs);
+};
+
+/**
+ * Stop the telemetry polling loop
+ */
+export const stopTelemetryLoop = () => {
+  if (_telemetryInterval) {
+    clearInterval(_telemetryInterval);
+    _telemetryInterval = null;
+    console.log('[OBD] Telemetry loop stopped');
+  }
+};
+
+// ─── WebSocket Bridge (raw data passthrough) ─────────────────
+
+/**
+ * Bridge raw Bluetooth data to Backend WebSocket.
+ * This forwards all incoming ELM327 data to the backend.
+ * 
+ * @param {WebSocket} ws The active WebSocket connection
  */
 export const registerBluetoothBridge = (ws) => {
   if (!ws) return;
 
   BluetoothService.setDataCallback((data) => {
-    if (ws && ws.readyState === 1) { // WebSocket.OPEN
+    if (ws && ws.readyState === 1) {
       try {
         ws.send(JSON.stringify({
           type: 'obd_raw',
