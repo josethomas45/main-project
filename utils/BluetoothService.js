@@ -218,80 +218,88 @@ class BluetoothService {
   /**
    * Send command and wait for the complete response.
    * Collects data until ELM327 '>' prompt or timeout.
-   * 
-   * During command execution, the permanent data listener is paused
-   * to prevent it from consuming response data.
    */
   async sendCommandWithResponse(command, timeoutMs = 5000) {
     if (!this.connectedDevice) {
       throw new Error('No connected device');
     }
 
-    // Wait if another command is in progress (serial queue)
-    while (this._commandInProgress) {
+    // Simple serial lock — wait for previous command
+    let waitCount = 0;
+    while (this._commandInProgress && waitCount < 50) {
       await new Promise(r => setTimeout(r, 100));
+      waitCount++;
     }
     this._commandInProgress = true;
 
     // Pause permanent data listener during command
     const hadPermanentListener = !!this.dataSubscription;
     if (this.dataSubscription) {
-      this.dataSubscription.remove();
+      try { this.dataSubscription.remove(); } catch (e) { /* ignore */ }
       this.dataSubscription = null;
     }
 
     try {
-      return await new Promise(async (resolve, reject) => {
+      // First, write the command
+      const cmdStr = command.endsWith('\r') ? command : command + '\r';
+      console.log(`[BT] >> Sending: "${command}"`);
+      await this.connectedDevice.write(cmdStr, 'ascii');
+
+      // Then wait for the response (non-async Promise executor)
+      const response = await new Promise((resolve) => {
         let responseBuffer = '';
         let tempSubscription = null;
         let timer = null;
 
         const cleanup = () => {
-          if (timer) clearTimeout(timer);
+          if (timer) { clearTimeout(timer); timer = null; }
           if (tempSubscription) {
-            tempSubscription.remove();
+            try { tempSubscription.remove(); } catch (e) { /* ignore */ }
             tempSubscription = null;
           }
         };
 
-        // Listen for response data
-        tempSubscription = this.connectedDevice.onDataReceived((event) => {
-          const chunk = event.data || '';
-          responseBuffer += chunk;
-
-          // ELM327 sends '>' when ready for next command
-          if (responseBuffer.includes('>')) {
-            cleanup();
-            const response = responseBuffer.replace(/>/g, '').trim();
-            console.log(`[BT] << "${command}" =>`, response);
-            resolve(response);
-          }
-        });
-
-        // Timeout
+        // Timeout — resolve with whatever we have
         timer = setTimeout(() => {
           cleanup();
-          const response = responseBuffer.trim();
-          console.warn(`[BT] ⏱ "${command}" timed out (${timeoutMs}ms). Got:`, response);
-          resolve(response); // Return what we have
+          console.warn(`[BT] ⏱ "${command}" timed out. Buffer:`, responseBuffer);
+          resolve(responseBuffer.trim());
         }, timeoutMs);
 
-        // Send the command
+        // Listen for response data
         try {
-          const cmdStr = command.endsWith('\r') ? command : command + '\r';
-          await this.connectedDevice.write(cmdStr, 'ascii');
-          console.log(`[BT] >> Sent: "${command}"`);
-        } catch (err) {
+          tempSubscription = this.connectedDevice.onDataReceived((event) => {
+            try {
+              const chunk = (event && event.data) ? event.data : '';
+              responseBuffer += chunk;
+
+              if (responseBuffer.includes('>')) {
+                cleanup();
+                const result = responseBuffer.replace(/>/g, '').trim();
+                console.log(`[BT] << "${command}" =>`, result);
+                resolve(result);
+              }
+            } catch (dataErr) {
+              console.warn('[BT] Data handler error:', dataErr);
+            }
+          });
+        } catch (subErr) {
           cleanup();
-          reject(err);
+          console.error('[BT] Failed to subscribe for data:', subErr);
+          resolve(''); // Return empty rather than crash
         }
       });
+
+      return response;
+    } catch (err) {
+      console.error(`[BT] sendCommandWithResponse("${command}") failed:`, err);
+      throw err;
     } finally {
       this._commandInProgress = false;
 
       // Restore permanent data listener if it was active
-      if (hadPermanentListener && this.onDataCallback) {
-        this._setupPermanentListener();
+      if (hadPermanentListener && this.onDataCallback && this.connectedDevice) {
+        try { this._setupPermanentListener(); } catch (e) { /* ignore */ }
       }
     }
   }
