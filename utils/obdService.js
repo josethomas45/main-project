@@ -28,11 +28,34 @@ export const detectVIN = async () => {
       return null;
     }
 
-    console.log('[OBD] Requesting VIN (09 02)...');
-    const response = await BluetoothService.sendCommandWithResponse('09 02', 8000);
+    // Retry VIN up to 3 times — first attempt often fails on ELM327 clones
+    const MAX_VIN_RETRIES = 3;
+    let response = null;
+
+    for (let attempt = 1; attempt <= MAX_VIN_RETRIES; attempt++) {
+      console.log(`[OBD] Requesting VIN (09 02) attempt ${attempt}/${MAX_VIN_RETRIES}...`);
+
+      // Verify still connected before each attempt
+      const stillConn = await BluetoothService.isConnected();
+      if (!stillConn) {
+        console.warn('[OBD] Connection lost before VIN attempt', attempt);
+        return null;
+      }
+
+      response = await BluetoothService.sendCommandWithResponse('09 02', 10000);
+
+      if (response && !response.includes('NO DATA') && !response.includes('ERROR') && !response.includes('UNABLE')) {
+        break; // Got a valid response
+      }
+
+      console.warn(`[OBD] VIN attempt ${attempt} returned:`, response);
+      if (attempt < MAX_VIN_RETRIES) {
+        await new Promise(r => setTimeout(r, 2000)); // Wait before retry
+      }
+    }
 
     if (!response || response.includes('NO DATA') || response.includes('ERROR') || response.includes('UNABLE')) {
-      console.warn('[OBD] VIN request returned no data:', response);
+      console.warn('[OBD] VIN failed after all retries:', response);
       return null;
     }
 

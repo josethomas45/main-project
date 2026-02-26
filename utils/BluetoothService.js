@@ -147,6 +147,10 @@ class BluetoothService {
       const connected = await RNBluetoothClassic.connectToDevice(address, {
         delimiter: '\r',
         charset: 'ascii',
+        CONNECTOR_TYPE: 'rfcomm',
+        DELIMITER: '\r',
+        DEVICE_CHARSET: Platform.OS === 'android' ? 'utf-8' : undefined,
+        READ_SIZE: 1024,
       });
 
       if (!connected) {
@@ -186,7 +190,8 @@ class BluetoothService {
     console.log('[BT] Initializing ELM327...');
 
     // Wait for BT link to stabilize before sending commands
-    await new Promise(r => setTimeout(r, 1000));
+    // Give RFCOMM channel time to fully open (clones need 3s+)
+    await new Promise(r => setTimeout(r, 3000));
 
     // Only send the essentials — no resets of any kind
     const initCommands = [
@@ -201,10 +206,18 @@ class BluetoothService {
       } catch (err) {
         console.warn(`[BT] ${cmd} failed (non-critical):`, err.message);
       }
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 1000));
     }
 
     console.log('[BT] ✅ ELM327 initialization complete');
+
+    // Final connection health check
+    const stillConnected = await this.connectedDevice.isConnected();
+    if (!stillConnected) {
+      console.error('[BT] ❌ Connection dropped during initialization');
+      throw new Error('Connection lost during OBD initialization');
+    }
+    console.log('[BT] ✅ Connection still alive after init');
   }
 
   /**

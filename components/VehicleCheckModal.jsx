@@ -141,6 +141,16 @@ export default function VehicleCheckModal({ visible, onComplete }) {
 
       // Step 2: Initialize ELM327 (ATZ, ATE0, etc.)
       await BluetoothService.initializeOBD();
+
+      // Wait for ELM327 to settle after init
+      setStatusMessage('Preparing to read vehicle info...');
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Verify connection is still alive
+      const stillConn = await BluetoothService.isConnected();
+      if (!stillConn) {
+        throw new Error('Connection dropped after OBD initialization');
+      }
       setStatusMessage('Reading vehicle info...');
       
       // Step 3: Detect VIN automatically
