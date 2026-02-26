@@ -245,7 +245,18 @@ class BluetoothService {
     }
 
     try {
-      // First, write the command
+      // Flush any stale data sitting in the BT receive buffer
+      try {
+        const stale = await this.connectedDevice.available();
+        if (stale > 0) {
+          const flushed = await this.connectedDevice.read();
+          console.log(`[BT] Flushed ${stale} stale bytes:`, flushed);
+        }
+      } catch (flushErr) {
+        // available()/read() may not be supported — ignore
+      }
+
+      // Write the command
       const cmdStr = command.endsWith('\r') ? command : command + '\r';
       console.log(`[BT] >> Sending: "${command}"`);
       await this.connectedDevice.write(cmdStr, 'ascii');
@@ -255,6 +266,7 @@ class BluetoothService {
         let responseBuffer = '';
         let tempSubscription = null;
         let timer = null;
+        let gotSearching = false;
 
         const cleanup = () => {
           if (timer) { clearTimeout(timer); timer = null; }
@@ -277,6 +289,19 @@ class BluetoothService {
             try {
               const chunk = (event && event.data) ? event.data : '';
               responseBuffer += chunk;
+
+              // ELM327 sends "SEARCHING...>" BEFORE the actual data.
+              // Strip it and keep waiting for the real response.
+              if (!gotSearching && responseBuffer.includes('SEARCHING')) {
+                gotSearching = true;
+                // Remove "SEARCHING..." and any > prompt from the buffer
+                responseBuffer = responseBuffer
+                  .replace(/SEARCHING\.\.\./g, '')
+                  .replace(/>/g, '')
+                  .trim();
+                console.log(`[BT] Stripped SEARCHING..., continuing to wait for data`);
+                return; // Don't resolve yet — real data is coming
+              }
 
               if (responseBuffer.includes('>')) {
                 cleanup();

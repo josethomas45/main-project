@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -42,9 +42,10 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   const [manualVIN, setManualVIN] = useState('');
   const [devices, setDevices] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
-    if (visible) {
+    if (visible && !loadingRef.current) {
       // Reset state and start scanning
       setFlowState('scanning');
       setStatusMessage('Looking for OBD Devices...');
@@ -66,6 +67,9 @@ export default function VehicleCheckModal({ visible, onComplete }) {
    * Discovery runs in the background so paired devices appear instantly.
    */
   const loadDevices = async () => {
+    if (loadingRef.current) return; // Prevent duplicate calls
+    loadingRef.current = true;
+
     setFlowState('scanning');
     setStatusMessage('Looking for OBD Devices...');
     setErrorMessage(null);
@@ -109,14 +113,17 @@ export default function VehicleCheckModal({ visible, onComplete }) {
         });
       }).then(() => {
         setIsScanning(false);
+        loadingRef.current = false;
       }).catch((err) => {
         console.warn('Discovery error (non-critical):', err);
         setIsScanning(false);
+        loadingRef.current = false;
       });
 
     } catch (err) {
       console.error('Device scan error:', err);
       setIsScanning(false);
+      loadingRef.current = false;
       setFlowState('error');
       setErrorMessage(err.message || 'Failed to scan for Bluetooth devices');
       setStatusMessage('Please try again');
