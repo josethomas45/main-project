@@ -2,7 +2,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,7 @@ import Animated, {
   ZoomIn,
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
-import { registerBluetoothBridge, startTelemetryLoop, stopTelemetryLoop } from "../utils/obdService";
+import OBDConnectionManager from "../utils/OBDConnectionManager";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -104,98 +104,44 @@ export default function OBDIssues() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const { currentVehicle, clearVehicle } = useVehicle();
   
-  // WebSocket state
-  const [wsConnected, setWsConnected] = useState(false);
-  const ws = useRef(null);
-  const reconnectTimeout = useRef(null);
+  // WebSocket state (driven by OBDConnectionManager)
+  const [wsConnected, setWsConnected] = useState(OBDConnectionManager.isConnected());
 
   useEffect(() => {
     fetchIncidents();
-    connectWebSocket();
-    
-    // Cleanup on unmount
+
+    // If the manager isn't running yet (deep link / cold start), start it
+    if (!OBDConnectionManager.isConnected()) {
+      (async () => {
+        try {
+          const token = await getToken();
+          if (token && currentVehicle && BACKEND_URL) {
+            OBDConnectionManager.start(token, BACKEND_URL);
+          }
+        } catch (err) {
+          console.warn('[OBDIssues] Failed to start OBDConnectionManager:', err);
+        }
+      })();
+    }
+
+    // Subscribe to status changes
+    const unsubStatus = OBDConnectionManager.onStatusChange((connected) => {
+      setWsConnected(connected);
+    });
+
+    // Subscribe to incoming data (alerts, etc.)
+    const unsubData = OBDConnectionManager.onData((data) => {
+      handleRealtimeData(data);
+    });
+
+    // Cleanup subscriptions on unmount (but keep manager running)
     return () => {
-      stopTelemetryLoop();
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-      }
-      if (ws.current) {
-        ws.current.close();
-      }
+      unsubStatus();
+      unsubData();
     };
   }, []);
   
-  /* ============================
-     WEBSOCKET CONNECTION
-  ============================ */
-  const connectWebSocket = async () => {
-    try {
-      const token = await getToken();
-      
-      // Don't connect if no vehicle is registered
-      if (!currentVehicle) {
-        console.warn('No active vehicle, skipping WebSocket connection');
-        return;
-      }
-      
-      // Determine WebSocket protocol based on backend URL
-      const wsProtocol = BACKEND_URL.startsWith('https') ? 'wss://' : 'ws://';
-      const cleanUrl = BACKEND_URL.replace('http://', '').replace('https://', '');
-      // Backend determines vehicle from session, no vehicle_id in URL
-      const wsUrl = `${wsProtocol}${cleanUrl}/ws/obd`;
-      
-      console.log('Connecting to WebSocket:', wsUrl);
-      
-      ws.current = new WebSocket(wsUrl);
-      
-      ws.current.onopen = () => {
-        console.log('WebSocket connected');
-        setWsConnected(true);
-        
-        // Send authentication token
-        ws.current.send(JSON.stringify({ 
-          type: 'auth', 
-          token 
-        }));
 
-        // Register Bluetooth bridge for raw data passthrough
-        registerBluetoothBridge(ws.current);
-
-        // Start structured telemetry polling (RPM, speed, temp, etc.)
-        startTelemetryLoop(ws.current);
-      };
-      
-      ws.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleRealtimeData(data);
-        } catch (err) {
-          console.error('WebSocket message parse error:', err);
-        }
-      };
-      
-      ws.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setWsConnected(false);
-      };
-      
-      ws.current.onclose = () => {
-        console.log('WebSocket disconnected');
-        setWsConnected(false);
-        stopTelemetryLoop();
-        
-        // Auto-reconnect after 5 seconds
-        reconnectTimeout.current = setTimeout(() => {
-          console.log('Attempting to reconnect...');
-          connectWebSocket();
-        }, 5000);
-      };
-    } catch (err) {
-      console.error('WebSocket connection error:', err);
-      setWsConnected(false);
-    }
-  };
-  
   /* ============================
      HANDLE REALTIME DATA
   ============================ */

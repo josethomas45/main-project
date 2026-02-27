@@ -16,9 +16,13 @@ import Animated, {
   FadeInDown,
   ZoomIn,
 } from 'react-native-reanimated';
+import { useAuth } from '@clerk/clerk-expo';
 import { useVehicle } from '../contexts/VehicleContext';
 import { detectVehicleInfo } from '../utils/obdService';
 import BluetoothService from '../utils/BluetoothService';
+import OBDConnectionManager from '../utils/OBDConnectionManager';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 /**
  * VehicleCheckModal Component
@@ -32,6 +36,7 @@ import BluetoothService from '../utils/BluetoothService';
  */
 export default function VehicleCheckModal({ visible, onComplete }) {
   const { identifyVehicle } = useVehicle();
+  const { getToken } = useAuth();
 
   // Flow states
   const [flowState, setFlowState] = useState('checking_obd'); // checking_obd, scanning, connecting, detecting_vin, manual_entry, registering, error, success
@@ -215,6 +220,17 @@ export default function VehicleCheckModal({ visible, onComplete }) {
       if (result.success) {
         setFlowState('success');
         setStatusMessage(result.isNew ? 'Vehicle registered!' : 'Welcome back!');
+
+        // Start WebSocket + telemetry streaming immediately
+        try {
+          const token = await getToken();
+          if (token && BACKEND_URL) {
+            OBDConnectionManager.start(token, BACKEND_URL);
+            console.log('[VehicleCheck] OBD streaming started after registration');
+          }
+        } catch (wsErr) {
+          console.warn('[VehicleCheck] Failed to start OBD streaming:', wsErr);
+        }
         
         // Close modal after short delay
         setTimeout(() => {
