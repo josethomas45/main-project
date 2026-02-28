@@ -95,8 +95,12 @@ function formatAIResponse(data) {
     text += "\n";
   }
 
-  if (typeof data.severity === "number") {
-    text += `⚠️ Severity: ${Math.round(data.severity * 100)}%\n`;
+  if (Array.isArray(data.youtube_urls) && data.youtube_urls.length > 0) {
+    text += "📺 Helpful Videos:\n";
+    data.youtube_urls.forEach((url, i) => {
+      text += `${i + 1}. ${url}\n`;
+    });
+    text += "\n";
   }
 
   return text.trim() || "⚠️ No response from agent";

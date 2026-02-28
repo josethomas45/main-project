@@ -1,8 +1,8 @@
 import { useOAuth, useSignUp } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useState } from "react";
 import {
   Alert,
@@ -271,6 +271,7 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     borderRadius: 16,
     paddingVertical: 16,
+    paddingHorizontal: 40,
     width: "100%",
   },
   googleButtonDisabled: {
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
     fontSize: 16.5,
     fontWeight: "600",
     color: "#1f2a44",
-    marginLeft: 12,
+    marginLeft: 10,
   },
 
   dividerRow: {
@@ -310,7 +311,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingVertical: 16,
-    width: "100%",
+    paddingHorizontal: 40,
+    width: "80%",
   },
   emailButtonText: {
     fontSize: 16.5,
