@@ -1,3 +1,4 @@
+// cache-bust: VehicleCheckModal removed
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -6,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -16,6 +17,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import Animated, {
   FadeInDown,
@@ -24,11 +26,19 @@ import Animated, {
   FadeInUp,
   useAnimatedStyle,
   useSharedValue,
-  withSpring
+  withSpring,
+  withRepeat,
+  withSequence
 } from "react-native-reanimated";
+import * as Speech from "expo-speech";
+import Voice from "@react-native-voice/voice";
+import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getDeviceLocation } from "../utils/location";
 import { fetchWorkshops } from "../utils/workshops";
+import { useVehicle } from "../contexts/VehicleContext";
+import Sidebar from "../components/Sidebar";
 
 /* =====================
    ENV GUARD
@@ -85,139 +95,17 @@ function formatAIResponse(data) {
     text += "\n";
   }
 
-  if (typeof data.severity === "number") {
-    text += `⚠️ Severity: ${Math.round(data.severity * 100)}%\n`;
+  if (Array.isArray(data.youtube_urls) && data.youtube_urls.length > 0) {
+    text += "📺 Helpful Videos:\n";
+    data.youtube_urls.forEach((url, i) => {
+      text += `${i + 1}. ${url}\n`;
+    });
+    text += "\n";
   }
 
   return text.trim() || "⚠️ No response from agent";
 }
 
-/* =====================
-   SIDEBAR COMPONENT (GLASS)
-===================== */
-function Sidebar({ visible, onClose, user, signOut, router }) {
-  const slideAnim = useRef(new RNAnimated.Value(-SIDEBAR_WIDTH)).current;
-
-  useEffect(() => {
-    RNAnimated.timing(slideAnim, {
-      toValue: visible ? 0 : -SIDEBAR_WIDTH,
-      duration: 350,
-      useNativeDriver: true,
-    }).start();
-  }, [visible]);
-
-  const menuItems = [
-    {
-      id: "maintenance",
-      icon: "build-outline",
-      label: "Maintenance Tracking",
-      onPress: () => {
-        router.push("MaintenanceTracking");
-        onClose();
-      },
-    },
-    {
-      id: "history",
-      icon: "time-outline",
-      label: "History",
-      onPress: () => {
-        router.push("HistoryPage");
-        onClose();
-      },
-    },
-    {
-      id: "profile",
-      icon: "person-outline",
-      label: "Profile",
-      onPress: () => {
-        router.push("profile");
-        onClose();
-      },
-    },
-  ];
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-    >
-      <View style={styles.sidebarContainer}>
-        {/* Backdrop */}
-        <TouchableOpacity
-          style={styles.sidebarBackdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-
-        {/* Glass Sidebar */}
-        <RNAnimated.View
-          style={[
-            styles.sidebar,
-            { transform: [{ translateX: slideAnim }] },
-          ]}
-        >
-          {/* Header with gradient avatar */}
-          <View style={styles.sidebarHeader}>
-            <LinearGradient
-              colors={["#6366f1", "#8b5cf6"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.sidebarAvatarRing}
-            >
-              <View style={styles.sidebarAvatar}>
-                <Text style={styles.sidebarAvatarText}>
-                  {user?.firstName?.[0]?.toUpperCase() || "U"}
-                </Text>
-              </View>
-            </LinearGradient>
-
-            <Text style={styles.sidebarUserName}>
-              {user?.firstName || "User"} {user?.lastName || ""}
-            </Text>
-            <Text style={styles.sidebarUserEmail}>
-              {user?.primaryEmailAddress?.emailAddress || ""}
-            </Text>
-          </View>
-
-          {/* Menu Items */}
-          <View style={styles.menuItems}>
-            {menuItems.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.menuItem}
-                onPress={item.onPress}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuIconContainer}>
-                  <Ionicons name={item.icon} size={22} color="#a5b4fc" />
-                </View>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={20} color="#64748b" />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Logout */}
-          <View style={styles.sidebarFooter}>
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={() => {
-                signOut();
-                onClose();
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-              <Text style={styles.logoutText}>Log out</Text>
-            </TouchableOpacity>
-          </View>
-        </RNAnimated.View>
-      </View>
-    </Modal>
-  );
-}
 
 /* =====================
    MAIN COMPONENT
@@ -227,6 +115,19 @@ export default function Chat() {
   const { user } = useUser();
   const router = useRouter();
   const { chatId } = useLocalSearchParams();
+  const { clearVehicle } = useVehicle();
+  const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) =>
+      setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardHeight(0)
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -239,6 +140,11 @@ export default function Chat() {
   ]);
   const [isSending, setIsSending] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  
+  // Voice features state
+  const [isRecording, setIsRecording] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
 
   const flatListRef = useRef(null);
   const msgCounter = useRef(0);
@@ -250,7 +156,7 @@ export default function Chat() {
     }, 100);
   }, [messages]);
 
-  /* =====================
+/* =====================
      LOAD EXISTING CHAT
   ===================== */
   useEffect(() => {
@@ -397,6 +303,149 @@ export default function Chat() {
     }
   };
 
+  /* =====================
+     VOICE FEATURES
+  ===================== */
+  // Check if Voice is available and initialize
+  useEffect(() => {
+    const initVoice = async () => {
+      try {
+        // Check if Voice module is properly initialized
+        const available = await Voice.isAvailable();
+        setVoiceAvailable(available);
+
+        if (available) {
+          Voice.onSpeechStart = () => {
+            setIsRecording(true);
+          };
+
+          Voice.onSpeechEnd = () => {
+            setIsRecording(false);
+          };
+
+          Voice.onSpeechResults = (e) => {
+            if (e.value && e.value[0]) {
+              setMessage(e.value[0]);
+            }
+          };
+
+          Voice.onSpeechError = (e) => {
+            console.error('Speech error:', e);
+            setIsRecording(false);
+            Alert.alert(
+              'Speech Recognition Error',
+              'Could not recognize speech. Please try again with less background noise.'
+            );
+          };
+        }
+      } catch (error) {
+        console.log('Voice not available:', error);
+        setVoiceAvailable(false);
+      }
+    };
+
+    initVoice();
+
+    return () => {
+      if (voiceAvailable) {
+        Voice.destroy().then(Voice.removeAllListeners).catch(e => console.log(e));
+      }
+    };
+  }, []);
+
+  // Start voice recording
+  const startVoiceRecording = async () => {
+    // Check if running in Expo Go (voice not available)
+    if (!voiceAvailable) {
+      Alert.alert(
+        'Voice Input Not Available',
+        'Voice recording requires a custom development build. This feature is not available in Expo Go.\n\nAlternatively, you can:\n• Type your message manually\n• Use the web version with browser speech recognition\n• Build a custom development build with: npx expo prebuild',
+        [
+          { text: 'OK', style: 'default' },
+          {
+            text: 'Learn More',
+            onPress: () => console.log('See docs: https://docs.expo.dev/workflow/prebuild/')
+          }
+        ]
+      );
+      return;
+    }
+
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await Voice.start('en-US');
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert(
+        'Recording Error',
+        'Failed to start voice recording. Please check microphone permissions and try again.'
+      );
+      setIsRecording(false);
+    }
+  };
+
+  // Stop voice recording
+  const stopVoiceRecording = async () => {
+    if (!voiceAvailable) {
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await Voice.stop();
+      setIsRecording(false);
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+      setIsRecording(false);
+    }
+  };
+
+  // Toggle voice recording
+  const toggleVoiceRecording = () => {
+    if (isRecording) {
+      stopVoiceRecording();
+    } else {
+      startVoiceRecording();
+    }
+  };
+
+  // Speak message (Text-to-Speech)
+  const speakMessage = async (text, messageId) => {
+    try {
+      // Stop any currently playing speech
+      if (speakingMessageId) {
+        await Speech.stop();
+      }
+
+      // If clicking on the same message, just stop
+      if (speakingMessageId === messageId) {
+        setSpeakingMessageId(null);
+        return;
+      }
+
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      // Clean text for better speech (remove emojis and special formatting)
+      const cleanText = text.replace(/[🔍💡🛠️❓⚠️📍]/g, '').trim();
+
+      setSpeakingMessageId(messageId);
+
+      Speech.speak(cleanText, {
+        language: 'en',
+        pitch: 1.0,
+        rate: 0.9,
+        onDone: () => setSpeakingMessageId(null),
+        onStopped: () => setSpeakingMessageId(null),
+        onError: () => setSpeakingMessageId(null),
+      });
+    } catch (error) {
+      console.error('TTS error:', error);
+      setSpeakingMessageId(null);
+    }
+  };
+
   // Press animation for send button
   const scale = useSharedValue(1);
   const animatedSendButton = useAnimatedStyle(() => ({
@@ -410,6 +459,27 @@ export default function Chat() {
     }, 100);
     sendMessage();
   };
+
+  // Microphone animation
+  const micScale = useSharedValue(1);
+  const micAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: micScale.value }],
+  }));
+
+  useEffect(() => {
+    if (isRecording) {
+      micScale.value = withRepeat(
+        withSequence(
+          withSpring(1.2, { damping: 2 }),
+          withSpring(1, { damping: 2 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      micScale.value = withSpring(1);
+    }
+  }, [isRecording]);
 
   /* =====================
      RENDER MESSAGE
@@ -457,6 +527,19 @@ export default function Chat() {
         ) : (
           // AI message - glass bubble
           <View style={styles.aiBubble}>
+            {/* Speaker button for TTS */}
+            <TouchableOpacity
+              style={styles.speakerButton}
+              onPress={() => speakMessage(item.text, item.id)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={speakingMessageId === item.id ? "volume-high" : "volume-medium-outline"}
+                size={18}
+                color={speakingMessageId === item.id ? "#6366f1" : "#94a3b8"}
+              />
+            </TouchableOpacity>
+
             <Text style={styles.aiText}>
               {parts.map((p, i) =>
                 p.startsWith("http") ? (
@@ -473,6 +556,13 @@ export default function Chat() {
               )}
             </Text>
             <Text style={styles.timestampAi}>{item.timestamp}</Text>
+
+            {/* Speaking indicator */}
+            {speakingMessageId === item.id && (
+              <View style={styles.speakingIndicator}>
+                <Text style={styles.speakingText}>🔊 Playing...</Text>
+              </View>
+            )}
           </View>
         )}
       </Animated.View>
@@ -483,11 +573,7 @@ export default function Chat() {
      UI
   ===================== */
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-    >
+    <View style={styles.container}>
       {/* Background gradient */}
       <LinearGradient
         colors={["#1e293b", "#0f172a"]}
@@ -505,7 +591,7 @@ export default function Chat() {
 
         <Text style={styles.headerTitle}>AutoVitals</Text>
 
-        <TouchableOpacity onPress={() => signOut()} style={styles.logoutHeaderButton}>
+        <TouchableOpacity onPress={() => { clearVehicle(); signOut(); }} style={styles.logoutHeaderButton}>
           <Ionicons name="log-out-outline" size={24} color="#f1f5f9" />
         </TouchableOpacity>
       </Animated.View>
@@ -518,6 +604,7 @@ export default function Chat() {
           user={user}
           signOut={signOut}
           router={router}
+          clearVehicle={clearVehicle}
         />
       )}
 
@@ -529,10 +616,21 @@ export default function Chat() {
         renderItem={renderMessage}
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
       />
 
       {/* Floating Input Bar (Glass Composer) */}
-      <Animated.View entering={FadeInUp.delay(400).duration(700)} style={styles.inputBarContainer}>
+      <View style={[styles.inputBarContainer, {
+        bottom: insets.bottom + keyboardHeight,
+      }]}>
+        {/* Recording indicator */}
+        {isRecording && (
+          <Animated.View entering={FadeInDown.duration(300)} style={styles.recordingIndicator}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingText}>Listening...</Text>
+          </Animated.View>
+        )}
+
         <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
@@ -543,6 +641,32 @@ export default function Chat() {
             multiline
             maxLength={500}
           />
+
+          {/* Microphone button */}
+          <Animated.View style={micAnimatedStyle}>
+            <TouchableOpacity
+              onPress={toggleVoiceRecording}
+              activeOpacity={0.7}
+              style={{ marginRight: 8 }}
+            >
+              <LinearGradient
+                colors={
+                  isRecording
+                    ? ["#ef4444", "#dc2626"]
+                    : ["#6366f1", "#8b5cf6"]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.micButton}
+              >
+                <Ionicons
+                  name={isRecording ? "stop" : "mic"}
+                  size={20}
+                  color="#ffffff"
+                />
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
 
           <Animated.View style={animatedSendButton}>
             <TouchableOpacity
@@ -569,8 +693,8 @@ export default function Chat() {
             </TouchableOpacity>
           </Animated.View>
         </View>
-      </Animated.View>
-    </KeyboardAvoidingView>
+      </View>
+    </View>
   );
 }
 
@@ -709,12 +833,12 @@ const styles = StyleSheet.create({
   // ── Input Bar (Floating Glass Composer) ──
   inputBarContainer: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
+    backgroundColor: "#0f172a",
     paddingHorizontal: 16,
-    paddingBottom: Platform.OS === "ios" ? 32 : 16,
     paddingTop: 12,
+    paddingBottom: 12,
   },
   inputBar: {
     flexDirection: "row",
@@ -874,6 +998,76 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#ef4444",
     marginLeft: 12,
+    fontWeight: "600",
+  },
+
+  // ── Voice Features ──
+  // Microphone button
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+
+  // Recording indicator
+  recordingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(239,68,68,0.15)",
+    borderRadius: 20,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.3)",
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
+    marginRight: 8,
+  },
+  recordingText: {
+    color: "#fecaca",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  // Speaker button (on AI bubble)
+  speakerButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(99,102,241,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.2)",
+  },
+
+  // Speaking indicator
+  speakingIndicator: {
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(99,102,241,0.15)",
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  speakingText: {
+    color: "#a5b4fc",
+    fontSize: 12,
     fontWeight: "600",
   },
 });

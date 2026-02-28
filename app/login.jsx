@@ -1,8 +1,8 @@
 import { useOAuth, useSignIn } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useState } from "react";
 import {
   Alert,
@@ -58,7 +58,7 @@ export default function Login() {
       if (createdSessionId) {
         await setActive({ session: createdSessionId });
         console.log("Google sign-in successful");
-        router.replace("/chat");
+        router.replace("/dashboard");
       } else {
         throw new Error("No session created");
       }
@@ -120,7 +120,11 @@ export default function Login() {
                   animatedGoogleStyle,
                 ]}
               >
-                <Ionicons name="logo-google" size={22} color="#4285F4" />
+                <Ionicons
+                  name="logo-google"
+                  size={18}
+                  color="#4285F4"
+                />
                 <Text style={styles.googleButtonText}>
                   {loading ? "Signing in…" : "Continue with Google"}
                 </Text>
@@ -145,7 +149,11 @@ export default function Login() {
               activeOpacity={0.75}
             // onPress={() => router.push("/(auth)/email-signin")}
             >
-              <Ionicons name="mail-outline" size={20} color="#526D82" />
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color="#526D82"
+              />
               <Text style={styles.emailButtonText}>Sign in with email</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -252,6 +260,7 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     borderRadius: 16,
     paddingVertical: 16,
+    paddingHorizontal: 40,
     width: "100%",
   },
   googleButtonDisabled: {
@@ -261,7 +270,7 @@ const styles = StyleSheet.create({
     fontSize: 16.5,
     fontWeight: "600",
     color: "#1f2a44",
-    marginLeft: 12,
+    marginLeft: 10,
   },
 
   dividerRow: {
@@ -291,7 +300,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     paddingVertical: 16,
-    width: "100%",
+    paddingHorizontal: 40,
+    width: "80%",
   },
   emailButtonText: {
     fontSize: 16.5,

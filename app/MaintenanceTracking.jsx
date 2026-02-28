@@ -3,11 +3,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -29,9 +31,14 @@ import {
   fetchMaintenanceRules,
   updateMaintenance,
 } from "../utils/maintenance";
+import {
+  cancelMaintenanceReminder,
+  scheduleMaintenanceReminder,
+} from "../utils/notifications";
+import { useVehicle } from "../contexts/VehicleContext";
+import Sidebar from "../components/Sidebar";
 
-// DEV ONLY
-const DEV_VEHICLE_ID = "c6df84cb-90e9-4307-9f39-779dcaba9dd3";
+
 
 // helpers
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -45,6 +52,19 @@ export default function MaintenanceTracking() {
   const router = useRouter();
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
+  const { currentVehicle, clearVehicle, isCheckingVehicle, checkCurrentVehicle } = useVehicle();
+  const vehicleCheckAttempted = useRef(false);
+
+  // Auto-refresh vehicle if it's null (e.g. race condition on app load)
+  useEffect(() => {
+    console.log("MaintenanceTracking: currentVehicle:", currentVehicle);
+    console.log("MaintenanceTracking: isCheckingVehicle:", isCheckingVehicle);
+    if (!currentVehicle && !isCheckingVehicle && !vehicleCheckAttempted.current) {
+      console.log("MaintenanceTracking: currentVehicle is null, re-checking...");
+      vehicleCheckAttempted.current = true;
+      checkCurrentVehicle();
+    }
+  }, [currentVehicle, isCheckingVehicle]);
 
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -53,6 +73,7 @@ export default function MaintenanceTracking() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingReminder, setEditingReminder] = useState(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const [newReminder, setNewReminder] = useState({
     service_type: "",
@@ -104,10 +125,30 @@ export default function MaintenanceTracking() {
       return;
     }
 
+    // Get vehicle ID — try context first, then fetch from backend
+    let vehicleId = currentVehicle?.id;
+    if (!vehicleId) {
+      console.log("handleAddReminder: currentVehicle is null, fetching from backend...");
+      const result = await checkCurrentVehicle();
+      vehicleId = result?.vehicle?.id;
+    }
+
+    if (!vehicleId) {
+      Alert.alert("Error", "No vehicle selected. Please go to Dashboard and ensure a vehicle is active.");
+      return;
+    }
+
     try {
-      await createMaintenance(
+      console.log("Creating maintenance with:", {
+        vehicle_id: vehicleId,
+        service_type: newReminder.service_type,
+        service_date: newReminder.service_date,
+        odometer_km: selectedRule?.requires_odometer ? Number(newReminder.odometer_km) : null,
+        notes: newReminder.notes || null,
+      });
+      const newRecord = await createMaintenance(
         {
-          vehicle_id: DEV_VEHICLE_ID,
+          vehicle_id: vehicleId,
           service_type: newReminder.service_type,
           service_date: newReminder.service_date,
           odometer_km: selectedRule?.requires_odometer
@@ -126,8 +167,24 @@ export default function MaintenanceTracking() {
         odometer_km: "",
       });
 
+      // Schedule notification for next due date
+      const intervalMonths = selectedRule?.interval_months || 6;
+      const serviceDate = new Date(newReminder.service_date);
+      const dueDate = new Date(serviceDate);
+      dueDate.setMonth(dueDate.getMonth() + intervalMonths);
+
+      await scheduleMaintenanceReminder(
+        newReminder.service_type,
+        dueDate,
+        newReminder.notes,
+        newRecord?.id
+      );
+
       await loadReminders();
-      Alert.alert("Success", "Maintenance added");
+      Alert.alert(
+        "Success",
+        `Maintenance added!\nReminder set for ${dueDate.toLocaleDateString()}.`
+      );
     } catch {
       Alert.alert("Error", "Failed to add maintenance");
     }
@@ -196,6 +253,9 @@ export default function MaintenanceTracking() {
           style: "destructive",
           onPress: async () => {
             try {
+              // Cancel any scheduled notification first
+              await cancelMaintenanceReminder(id);
+
               await deleteMaintenance(id, getToken);
               setReminders((prev) => prev.filter((item) => item.id !== id));
               Alert.alert("Deleted", "Maintenance record deleted");
@@ -285,9 +345,15 @@ export default function MaintenanceTracking() {
 
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+        {/* Sidebar menu button */}
+        <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerButton}>
+          <Ionicons name="menu" size={26} color="#f1f5f9" />
+        </TouchableOpacity>
+        {/* Back button commented out
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
           <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
         </TouchableOpacity>
+        */}
 
         <Text style={styles.headerTitle}>Maintenance</Text>
 
@@ -373,17 +439,21 @@ export default function MaintenanceTracking() {
       <Modal
         visible={showAddModal}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={styles.backdropTouchable}
-            activeOpacity={1}
-            onPress={() => setShowAddModal(false)}
-          />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity
+              style={styles.backdropTouchable}
+              activeOpacity={1}
+              onPress={() => setShowAddModal(false)}
+            />
 
-          <Animated.View entering={FadeInUp.duration(500).springify()} style={styles.modalSheet}>
+            <Animated.View entering={FadeInUp.duration(400)} style={styles.modalSheet}>
             <View style={styles.sheetHandle} />
 
             <Text style={styles.modalTitle}>
@@ -482,8 +552,9 @@ export default function MaintenanceTracking() {
                 </LinearGradient>
               </TouchableOpacity>
             </ScrollView>
-          </Animated.View>
-        </View>
+            </Animated.View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Profile Quick Menu – Glass */}
@@ -548,6 +619,18 @@ export default function MaintenanceTracking() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Sidebar */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+          clearVehicle={clearVehicle}
+        />
+      )}
     </View>
   );
 }
@@ -697,7 +780,7 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: "absolute",
     right: 24,
-    bottom: 32,
+    bottom: 52,
   },
   fab: {
     width: 64,
@@ -758,19 +841,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalSheet: {
-    backgroundColor: "rgba(30,41,59,0.95)",
+    backgroundColor: "rgba(30,41,59,0.98)",
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 40,
-    maxHeight: "88%",
+    minHeight: "55%",
+    maxHeight: "90%",
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
   },
   sheetHandle: {
     width: 40,

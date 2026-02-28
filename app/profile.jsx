@@ -3,6 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import Sidebar from "../components/Sidebar";
+import { useVehicle } from "../contexts/VehicleContext";
 import {
   Alert,
   Dimensions,
@@ -98,11 +100,13 @@ export default function Profile() {
   const router = useRouter();
   const { signOut } = useAuth();
   const { user } = useUser();
+  const { clearVehicle } = useVehicle();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editField, setEditField] = useState({ type: "", value: "", label: "" });
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
-  const handleBack = () => router.back();
+  // const handleBack = () => router.back();
 
   const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -157,9 +161,15 @@ export default function Profile() {
 
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(600)} style={styles.header}>
+        {/* Sidebar menu button */}
+        <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerButton}>
+          <Ionicons name="menu" size={26} color="#f1f5f9" />
+        </TouchableOpacity>
+        {/* Back button commented out
         <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
           <Ionicons name="chevron-back" size={26} color="#f1f5f9" />
         </TouchableOpacity>
+        */}
 
         <Text style={styles.headerTitle}>Profile</Text>
 
@@ -417,6 +427,18 @@ export default function Profile() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Sidebar */}
+      {sidebarVisible && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          user={user}
+          signOut={signOut}
+          router={router}
+          clearVehicle={clearVehicle}
+        />
+      )}
     </View>
   );
 }
