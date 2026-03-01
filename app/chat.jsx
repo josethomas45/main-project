@@ -242,7 +242,7 @@ export default function Chat() {
       },
       body: JSON.stringify({ 
         message: text,
-        chat_id: currentChatId // Pass existing thread ID if available
+        ...(currentChatId && { chat_id: currentChatId })
       }),
     });
 
