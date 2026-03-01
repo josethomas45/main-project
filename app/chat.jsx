@@ -144,6 +144,9 @@ export default function Chat() {
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
 
+  // Threading state
+  const [currentChatId, setCurrentChatId] = useState(chatId || null);
+
   // Register speech recognition events
   useSpeechRecognitionEvent("start", () => setIsRecording(true));
   useSpeechRecognitionEvent("end", () => setIsRecording(false));
@@ -237,7 +240,10 @@ export default function Chat() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ 
+        message: text,
+        chat_id: currentChatId // Pass existing thread ID if available
+      }),
     });
 
     if (!res.ok) throw new Error("Agent failed");
@@ -266,6 +272,11 @@ export default function Chat() {
 
     try {
       const data = await callBackend(userText);
+      
+      // Save chat_id for subsequent messages in this thread
+      if (data.chat_id && !currentChatId) {
+        setCurrentChatId(data.chat_id);
+      }
 
       setMessages((prev) => [
         ...prev,
