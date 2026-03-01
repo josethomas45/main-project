@@ -1,9 +1,4 @@
-/**
- * OBD Service Layer (Mock/Demo Implementation)
- * 
- * This service provides an abstraction layer for OBD device communication.
- * This implementation uses mock functions for demonstration purposes.
- */
+import { getNextVIN } from './demoVins';
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -20,12 +15,7 @@ export const checkOBDConnection = async () => {
  */
 export const detectVIN = async () => {
   await delay(2000);
-  const mockVINs = [
-    '1HGBH41JXMN109186', // Honda
-    '1FTFW1ET5EFA12345', // Ford
-    '6YJSA1E26HF000001', // Tesla
-  ];
-  return mockVINs[Math.floor(Math.random() * mockVINs.length)];
+  return getNextVIN();
 };
 
 /**
