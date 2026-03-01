@@ -288,7 +288,7 @@ export default function Chat() {
         },
       ]);
 
-      // If the backend returned workshop results, show maps_urls from the response
+      // If the backend returned workshop results, show maps_urls from the response as text
       if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
         setMessages((prev) => [
           ...prev,
@@ -800,6 +800,55 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
   },
 
   // ── Input Bar (Floating Glass Composer) ──

@@ -244,6 +244,7 @@ export default function ChatHistory() {
           if (row.response_ai) {
             // Try to parse and format AI response
             let aiText = row.response_ai;
+            let mapsUrls = null;
             
             // Check if response is JSON format
             try {
@@ -251,6 +252,8 @@ export default function ChatHistory() {
                 ? JSON.parse(row.response_ai) 
                 : row.response_ai;
               
+              mapsUrls = parsed.maps_urls || null;
+
               // Format the response
               let formatted = "";
               if (parsed.diagnosis) formatted += `🔍 Diagnosis:\n${parsed.diagnosis}\n\n`;
@@ -445,7 +448,7 @@ export default function ChatHistory() {
         },
         body: JSON.stringify({ 
           message: userText,
-          chat_id: selectedChat?.id || params.chatId
+          ...((selectedChat?.id || params.chatId) && { chat_id: selectedChat?.id || params.chatId })
         }),
       });
 
@@ -489,6 +492,22 @@ export default function ChatHistory() {
         }),
       };
       setChatMessages((prev) => [...prev, aiMsg]);
+
+      // If the backend returned workshop results, show maps_urls from the response as text
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        const workshopMsg = {
+          id: `workshops-${Date.now()}`,
+          sender: "ai",
+          text:
+            "📍 Nearby workshops:\n\n" +
+            data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+        setChatMessages((prev) => [...prev, workshopMsg]);
+      }
     } catch (err) {
       console.error("Send message error:", err);
       const errorMsg = {
@@ -1251,6 +1270,63 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
+  },
+
+  // ── Loading ──
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
   },
   speakerButton: {
     alignSelf: "flex-end",
