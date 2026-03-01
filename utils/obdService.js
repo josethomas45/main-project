@@ -35,11 +35,48 @@ export const detectVehicleInfo = async () => {
 };
 
 /**
- * Simulates reading DTCs
+ * Simulates reading DTCs with data snapshots for demo mode
  */
 export const readDTCs = async () => {
   await delay(1500);
-  return []; // No issues in demo mode by default
+  return [
+    {
+      id: 'dtc-123',
+      code: 'P0301',
+      metric: 'engine_misfire',
+      message: 'Cylinder 1 Misfire Detected',
+      severity: 'high',
+      status: 'open',
+      trigger_value: '15%',
+      trigger_limit: '2%',
+      created_at: new Date().toISOString(),
+      snapshot: {
+        rpm: 3200,
+        speed: 45,
+        coolant_temp: 98,
+        engine_load: 85,
+        fuel_trim: '+12%'
+      }
+    },
+    {
+      id: 'dtc-456',
+      code: 'P0118',
+      metric: 'coolant_temp',
+      message: 'Engine Coolant Temperature Circuit High',
+      severity: 'medium',
+      status: 'open',
+      trigger_value: '115°C',
+      trigger_limit: '105°C',
+      created_at: new Date(Date.now() - 3600000).toISOString(),
+      snapshot: {
+        rpm: 2100,
+        speed: 65,
+        coolant_temp: 115,
+        engine_load: 40,
+        voltage: '13.2V'
+      }
+    }
+  ];
 };
 
 /**

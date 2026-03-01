@@ -164,6 +164,24 @@ export default function Chat() {
     fetchLocation();
   }, []);
 
+  // Handle auto-starting conversation from Issue Context (Demo Mode)
+  useEffect(() => {
+    if (params.issue_context) {
+      try {
+        const context = JSON.parse(params.issue_context);
+        if (context.initial_query) {
+          // Send the initial analysis request automatically
+          console.log("[Chat] Auto-starting diagnostic for issue:", context.code);
+          setTimeout(() => {
+            sendMessage(context.initial_query);
+          }, 500);
+        }
+      } catch (err) {
+        console.error("[Chat] Failed to parse issue_context:", err);
+      }
+    }
+  }, [params.issue_context]);
+
   // Register speech recognition events
   useSpeechRecognitionEvent("start", () => setIsRecording(true));
   useSpeechRecognitionEvent("end", () => setIsRecording(false));
