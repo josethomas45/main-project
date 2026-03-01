@@ -19,7 +19,7 @@ import Animated, {
 import { useAuth } from '@clerk/clerk-expo';
 import { useVehicle } from '../contexts/VehicleContext';
 import { detectVehicleInfo } from '../utils/obdService';
-import BluetoothService from '../utils/BluetoothService';
+// import BluetoothService from '../utils/BluetoothService';
 import OBDConnectionManager from '../utils/OBDConnectionManager';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
