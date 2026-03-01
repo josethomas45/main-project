@@ -4,7 +4,7 @@ const BACKEND_URL =
 
 export async function fetchWorkshops({ latitude, longitude, token }) {
   const res = await fetch(
-    `${BACKEND_URL}/vehicle/workshops?latitude=${latitude}&longitude=${longitude}`,
+    `${BACKEND_URL}/locations/workshops?latitude=${latitude}&longitude=${longitude}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

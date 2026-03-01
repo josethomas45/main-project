@@ -36,6 +36,7 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/
 import * as Haptics from "expo-haptics";
 import Sidebar from "../components/Sidebar";
 import { useVehicle } from "../contexts/VehicleContext";
+import { getDeviceLocation } from "../utils/location";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -70,6 +71,22 @@ export default function ChatHistory() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  // Background location for workshops
+  const [location, setLocation] = useState(null);
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const loc = await getDeviceLocation();
+        setLocation(loc);
+        console.log("[History] Background location fetched:", loc);
+      } catch (err) {
+        console.warn("[History] Failed to fetch background location:", err);
+      }
+    };
+    fetchLocation();
+  }, []);
 
   // Voice features state
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
@@ -445,6 +462,8 @@ export default function ChatHistory() {
         },
         body: JSON.stringify({ 
           message: userText,
+          latitude: location?.latitude,
+          longitude: location?.longitude,
           chat_id: selectedChat?.id || params.chatId
         }),
       });
@@ -477,6 +496,12 @@ export default function ChatHistory() {
           aiText += `${i + 1}. ${url}\n`;
         });
         aiText += "\n";
+      }
+
+      // Consolidate workshop results into the main bubble if present
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        aiText += "\n\n📍 Nearby workshops:\n" + 
+          data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n");
       }
 
       const aiMsg = {

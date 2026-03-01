@@ -38,6 +38,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useVehicle } from "../contexts/VehicleContext";
 import Sidebar from "../components/Sidebar";
+import { getDeviceLocation } from "../utils/location";
 
 /* =====================
    ENV GUARD
@@ -147,6 +148,22 @@ export default function Chat() {
   // Threading state
   const [currentChatId, setCurrentChatId] = useState(chatId || null);
 
+  // Background location for workshops
+  const [location, setLocation] = useState(null);
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const loc = await getDeviceLocation();
+        setLocation(loc);
+        console.log("[Chat] Background location fetched:", loc);
+      } catch (err) {
+        console.warn("[Chat] Failed to fetch background location:", err);
+      }
+    };
+    fetchLocation();
+  }, []);
+
   // Register speech recognition events
   useSpeechRecognitionEvent("start", () => setIsRecording(true));
   useSpeechRecognitionEvent("end", () => setIsRecording(false));
@@ -242,6 +259,8 @@ export default function Chat() {
       },
       body: JSON.stringify({ 
         message: text,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
         ...(currentChatId && { chat_id: currentChatId })
       }),
     });
@@ -278,30 +297,23 @@ export default function Chat() {
         setCurrentChatId(data.chat_id);
       }
 
+      let aiText = formatAIResponse(data);
+
+      // Consolidate workshop results into the main bubble if present
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        aiText += "\n\n📍 Nearby workshops:\n" + 
+          data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n");
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           id: data.chat_id ?? genId(),
           sender: "ai",
-          text: formatAIResponse(data),
+          text: aiText,
           timestamp: timeNow(),
         },
       ]);
-
-      // If the backend returned workshop results, show maps_urls from the response
-      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genId(),
-            sender: "ai",
-            text:
-              "📍 Nearby workshops:\n\n" +
-              data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-            timestamp: timeNow(),
-          },
-        ]);
-      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
