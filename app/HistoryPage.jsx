@@ -244,6 +244,7 @@ export default function ChatHistory() {
           if (row.response_ai) {
             // Try to parse and format AI response
             let aiText = row.response_ai;
+            let mapsUrls = null;
             
             // Check if response is JSON format
             try {
@@ -251,6 +252,8 @@ export default function ChatHistory() {
                 ? JSON.parse(row.response_ai) 
                 : row.response_ai;
               
+              mapsUrls = parsed.maps_urls || null;
+
               // Format the response
               let formatted = "";
               if (parsed.diagnosis) formatted += `🔍 Diagnosis:\n${parsed.diagnosis}\n\n`;
@@ -293,6 +296,7 @@ export default function ChatHistory() {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
+              maps_urls: mapsUrls,
             });
           }
 
@@ -487,6 +491,7 @@ export default function ChatHistory() {
           hour: "2-digit",
           minute: "2-digit",
         }),
+        maps_urls: data.maps_urls || null,
       };
       setChatMessages((prev) => [...prev, aiMsg]);
     } catch (err) {
@@ -658,6 +663,39 @@ export default function ChatHistory() {
             {speakingMessageId === item.id && (
               <View style={styles.speakingIndicator}>
                 <Text style={styles.speakingText}>🔊 Playing...</Text>
+              </View>
+            )}
+
+            {/* Workshop Cards */}
+            {item.maps_urls && item.maps_urls.length > 0 && (
+              <View style={styles.workshopContainer}>
+                <Text style={styles.workshopHeader}>📍 Discovery Results:</Text>
+                <FlatList
+                  horizontal
+                  data={item.maps_urls}
+                  keyExtractor={(u, i) => `map-${i}`}
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={({ item: url, index }) => (
+                    <TouchableOpacity
+                      style={styles.workshopCard}
+                      onPress={() => Linking.openURL(url)}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={["#475569", "#1e293b"]}
+                        style={styles.workshopCardGradient}
+                      >
+                        <Ionicons name="map-outline" size={24} color="#a5b4fc" />
+                        <Text style={styles.workshopCardTitle}>Workshop #{index + 1}</Text>
+                        <View style={styles.openMapButton}>
+                          <Text style={styles.openMapText}>Open Maps</Text>
+                          <Ionicons name="chevron-forward" size={14} color="#6366f1" />
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+                  contentContainerStyle={styles.workshopList}
+                />
               </View>
             )}
           </View>
@@ -1251,6 +1289,63 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
+  },
+
+  // ── Loading ──
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
   },
   speakerButton: {
     alignSelf: "flex-end",

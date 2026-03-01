@@ -285,23 +285,11 @@ export default function Chat() {
           sender: "ai",
           text: formatAIResponse(data),
           timestamp: timeNow(),
+          maps_urls: data.maps_urls || null, // Store maps_urls for card rendering
         },
       ]);
 
-      // If the backend returned workshop results, show maps_urls from the response
-      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genId(),
-            sender: "ai",
-            text:
-              "📍 Nearby workshops:\n\n" +
-              data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-            timestamp: timeNow(),
-          },
-        ]);
-      }
+      // Remove redundant text message for workshops since we now use cards
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -533,6 +521,39 @@ export default function Chat() {
             {speakingMessageId === item.id && (
               <View style={styles.speakingIndicator}>
                 <Text style={styles.speakingText}>🔊 Playing...</Text>
+              </View>
+            )}
+
+            {/* Workshop Cards */}
+            {item.maps_urls && item.maps_urls.length > 0 && (
+              <View style={styles.workshopContainer}>
+                <Text style={styles.workshopHeader}>📍 Discovery Results:</Text>
+                <FlatList
+                  horizontal
+                  data={item.maps_urls}
+                  keyExtractor={(u, i) => `map-${i}`}
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={({ item: url, index }) => (
+                    <TouchableOpacity
+                      style={styles.workshopCard}
+                      onPress={() => Linking.openURL(url)}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={["#475569", "#1e293b"]}
+                        style={styles.workshopCardGradient}
+                      >
+                        <Ionicons name="map-outline" size={24} color="#a5b4fc" />
+                        <Text style={styles.workshopCardTitle}>Workshop #{index + 1}</Text>
+                        <View style={styles.openMapButton}>
+                          <Text style={styles.openMapText}>Open Maps</Text>
+                          <Ionicons name="chevron-forward" size={14} color="#6366f1" />
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+                  contentContainerStyle={styles.workshopList}
+                />
               </View>
             )}
           </View>
@@ -800,6 +821,55 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
   },
 
   // ── Input Bar (Floating Glass Composer) ──
