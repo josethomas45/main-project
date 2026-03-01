@@ -31,6 +31,9 @@ import Animated, {
   withSequence,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Speech from "expo-speech";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/expo-speech-recognition";
+import * as Haptics from "expo-haptics";
 import Sidebar from "../components/Sidebar";
 import { useVehicle } from "../contexts/VehicleContext";
 
@@ -67,6 +70,26 @@ export default function ChatHistory() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  // Voice features state
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
+
+  // Register speech recognition events
+  useSpeechRecognitionEvent("start", () => setIsRecording(true));
+  useSpeechRecognitionEvent("end", () => setIsRecording(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    if (event.results[0]?.transcript) {
+      setMessage(event.results[0].transcript);
+    }
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    console.error("Speech recognition error:", event.error, event.message);
+    setIsRecording(false);
+    Alert.alert(
+      "Speech Recognition Error",
+      "Could not recognize speech. Please try again with less background noise."
+    );
+  });
 
   // Ref for auto-scroll
   const flatListRef = useRef(null);
@@ -297,6 +320,102 @@ export default function ChatHistory() {
   /* ============================
      SEND MESSAGE
   ============================ */
+  /* ============================
+     VOICE FEATURES
+  ============================ */
+  // Permissions check on mount
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const result = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+        if (result.status === "undetermined") {
+          await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        }
+      } catch (e) {
+        console.log("Permission check failed:", e);
+      }
+    };
+    checkPermissions();
+  }, []);
+
+  // Start voice recording
+  const startVoiceRecording = async () => {
+    try {
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
+        Alert.alert(
+          "Permission Denied",
+          "Microphone and speech recognition permissions are required to use voice input."
+        );
+        return;
+      }
+
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+      });
+    } catch (error) {
+      console.error("Failed to start recording:", error);
+      Alert.alert(
+        "Recording Error",
+        "Failed to start voice recording. Please check microphone permissions and try again."
+      );
+      setIsRecording(false);
+    }
+  };
+
+  // Stop voice recording
+  const stopVoiceRecording = async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      ExpoSpeechRecognitionModule.stop();
+      setIsRecording(false);
+    } catch (error) {
+      console.error("Failed to stop recording:", error);
+      setIsRecording(false);
+    }
+  };
+
+  // Toggle voice recording
+  const toggleVoiceRecording = () => {
+    if (isRecording) {
+      stopVoiceRecording();
+    } else {
+      startVoiceRecording();
+    }
+  };
+
+  // Speak message (Text-to-Speech)
+  const speakMessage = async (text, messageId) => {
+    try {
+      if (speakingMessageId) {
+        await Speech.stop();
+      }
+
+      if (speakingMessageId === messageId) {
+        setSpeakingMessageId(null);
+        return;
+      }
+
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const cleanText = text.replace(/[🔍💡🛠️❓⚠️📍]/g, '').trim();
+      setSpeakingMessageId(messageId);
+
+      Speech.speak(cleanText, {
+        language: 'en',
+        pitch: 1.0,
+        rate: 0.9,
+        onDone: () => setSpeakingMessageId(null),
+        onStopped: () => setSpeakingMessageId(null),
+        onError: () => setSpeakingMessageId(null),
+      });
+    } catch (error) {
+      console.error('TTS error:', error);
+      setSpeakingMessageId(null);
+    }
+  };
+
   const sendMessage = async () => {
     if (!message.trim() || isSending) return;
 
@@ -505,6 +624,19 @@ export default function ChatHistory() {
         ) : (
           // AI message - glass bubble
           <View style={styles.aiBubble}>
+            {/* Speaker button for TTS */}
+            <TouchableOpacity
+              style={styles.speakerButton}
+              onPress={() => speakMessage(item.text, item.id)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={speakingMessageId === item.id ? "volume-high" : "volume-medium-outline"}
+                size={18}
+                color={speakingMessageId === item.id ? "#6366f1" : "#94a3b8"}
+              />
+            </TouchableOpacity>
+
             <Text style={styles.aiText}>
               {parts.map((p, i) =>
                 p.startsWith("http") ? (
@@ -521,6 +653,13 @@ export default function ChatHistory() {
               )}
             </Text>
             <Text style={styles.timestampAi}>{item.timestamp}</Text>
+
+            {/* Speaking indicator */}
+            {speakingMessageId === item.id && (
+              <View style={styles.speakingIndicator}>
+                <Text style={styles.speakingText}>🔊 Playing...</Text>
+              </View>
+            )}
           </View>
         )}
       </Animated.View>
@@ -609,6 +748,14 @@ export default function ChatHistory() {
           <View style={[styles.inputBarContainer, {
             bottom: insets.bottom + keyboardHeight,
           }]}>
+            {/* Recording indicator */}
+            {isRecording && (
+              <Animated.View entering={FadeInDown.duration(300)} style={styles.recordingIndicator}>
+                <View style={styles.recordingDot} />
+                <Text style={styles.recordingText}>Listening...</Text>
+              </Animated.View>
+            )}
+
             <View style={styles.inputBar}>
               <TextInput
                 style={styles.input}
@@ -623,7 +770,7 @@ export default function ChatHistory() {
               {/* Microphone button */}
               <Animated.View style={micAnimatedStyle}>
                 <TouchableOpacity
-                  onPress={() => setIsRecording((r) => !r)}
+                  onPress={toggleVoiceRecording}
                   activeOpacity={0.7}
                   style={{ marginRight: 8 }}
                 >
@@ -1105,6 +1252,30 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
     fontWeight: "600",
   },
+  speakerButton: {
+    alignSelf: "flex-end",
+    padding: 4,
+    marginBottom: -4,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 8,
+  },
+  speakingIndicator: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  speakingText: {
+    fontSize: 10,
+    color: "#a5b4fc",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
 
   // ── Loading ──
   loadingContainer: {
@@ -1305,5 +1476,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 6,
+  },
+  recordingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(239,68,68,0.15)",
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
+    marginRight: 8,
+  },
+  recordingText: {
+    color: "#ef4444",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
 });
