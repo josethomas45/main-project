@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "my-login-app",
+    "name": "AutoVitals",
     "slug": "my-login-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,18 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.myloginapp"
+      "package": "com.anonymous.myloginapp",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "gradleProperties": {
+        "android.useAndroidX": "true",
+        "android.enableJetifier": "true"
+      }
     },
     "web": {
       "output": "static",
@@ -46,11 +57,33 @@
         {
           "color": "#6366f1"
         }
+      ],
+      [
+        "with-rn-bluetooth-classic",
+        {
+          "peripheralUsageDescription": "Allow AutoVitals to connect to your OBD sensor.",
+          "protocols": [
+            "com.autovitals.obd"
+          ]
+        }
+      ],
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "Allow AutoVitals to access the microphone for voice commands."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5e6d3133-a2cb-4e23-bc62-acf67bfb075f"
+      }
+    },
+    "owner": "basilv"
   }
 }
