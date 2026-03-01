@@ -275,8 +275,10 @@ const TELEMETRY_PIDS = [
   { pid: '01 0F', name: 'intake_temp',  parse: (a) => a - 40 },  // °C
 ];
 
-let _telemetryInterval = null;
+let _telemetryTimer = null;
 let _dtcCheckCounter = 0;
+let _polling = false;
+let _telemetryRunning = false;
 
 /**
  * Parse a standard OBD Mode 01 response.
@@ -298,18 +300,24 @@ function parseOBDResponse(response) {
 
 /**
  * Start polling OBD telemetry and forwarding to WebSocket.
- * Also checks for DTCs every ~30 seconds.
+ * Uses setTimeout chaining (not setInterval) so polls never overlap,
+ * keeping the JS thread free for UI touch events.
  * 
  * @param {WebSocket} ws - The WebSocket connection to the backend
- * @param {number} intervalMs - Poll interval (default 2000ms)
+ * @param {number} pauseMs - Pause between poll cycles (default 3000ms)
  */
-export const startTelemetryLoop = (ws, intervalMs = 2000) => {
+export const startTelemetryLoop = (ws, pauseMs = 3000) => {
   stopTelemetryLoop(); // Clear any existing loop
   _dtcCheckCounter = 0;
+  _telemetryRunning = true;
 
-  console.log('[OBD] Starting telemetry loop...');
+  console.log('[OBD] Starting telemetry loop (non-blocking)...');
 
-  _telemetryInterval = setInterval(async () => {
+  const pollOnce = async () => {
+    if (!_telemetryRunning) return;  // Stopped
+    if (_polling) return;             // Previous cycle still running
+
+    _polling = true;
     try {
       const connected = await BluetoothService.isConnected();
       if (!connected) {
@@ -320,8 +328,10 @@ export const startTelemetryLoop = (ws, intervalMs = 2000) => {
 
       const telemetry = {};
 
-      // Poll each PID
+      // Poll each PID sequentially
       for (const { pid, name, parse } of TELEMETRY_PIDS) {
+        if (!_telemetryRunning) break; // Exit early if stopped
+
         try {
           const response = await BluetoothService.sendCommandWithResponse(pid, 3000);
           if (response && !response.includes('NO DATA') && !response.includes('ERROR')) {
@@ -344,9 +354,9 @@ export const startTelemetryLoop = (ws, intervalMs = 2000) => {
         }));
       }
 
-      // Check DTCs periodically (~every 30s = 15 intervals at 2s)
+      // Check DTCs periodically (~every 5 cycles)
       _dtcCheckCounter++;
-      if (_dtcCheckCounter >= 15) {
+      if (_dtcCheckCounter >= 5) {
         _dtcCheckCounter = 0;
         const dtcs = await readDTCs();
         if (dtcs.length > 0 && ws && ws.readyState === 1) {
@@ -359,17 +369,28 @@ export const startTelemetryLoop = (ws, intervalMs = 2000) => {
       }
     } catch (err) {
       console.error('[OBD] Telemetry loop error:', err);
+    } finally {
+      _polling = false;
     }
-  }, intervalMs);
+
+    // Schedule next cycle AFTER this one completes (no overlap!)
+    if (_telemetryRunning) {
+      _telemetryTimer = setTimeout(pollOnce, pauseMs);
+    }
+  };
+
+  // Kick off the first poll
+  _telemetryTimer = setTimeout(pollOnce, 500);
 };
 
 /**
  * Stop the telemetry polling loop
  */
 export const stopTelemetryLoop = () => {
-  if (_telemetryInterval) {
-    clearInterval(_telemetryInterval);
-    _telemetryInterval = null;
+  _telemetryRunning = false;
+  if (_telemetryTimer) {
+    clearTimeout(_telemetryTimer);
+    _telemetryTimer = null;
     console.log('[OBD] Telemetry loop stopped');
   }
 };
