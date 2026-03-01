@@ -144,6 +144,9 @@ export default function Chat() {
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
 
+  // Threading state
+  const [currentChatId, setCurrentChatId] = useState(chatId || null);
+
   // Register speech recognition events
   useSpeechRecognitionEvent("start", () => setIsRecording(true));
   useSpeechRecognitionEvent("end", () => setIsRecording(false));
@@ -237,7 +240,10 @@ export default function Chat() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ 
+        message: text,
+        chat_id: currentChatId // Pass existing thread ID if available
+      }),
     });
 
     if (!res.ok) throw new Error("Agent failed");
@@ -266,6 +272,11 @@ export default function Chat() {
 
     try {
       const data = await callBackend(userText);
+      
+      // Save chat_id for subsequent messages in this thread
+      if (data.chat_id && !currentChatId) {
+        setCurrentChatId(data.chat_id);
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -277,31 +288,19 @@ export default function Chat() {
         },
       ]);
 
-      if (/workshop|garage|mechanic|service center/i.test(userText)) {
-        const location = await getDeviceLocation();
-        const token = await getToken();
-
-        const workshopData = await fetchWorkshops({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          token,
-        });
-
-        const urls = workshopData?.maps_urls || [];
-
-        if (urls.length) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: genId(),
-              sender: "ai",
-              text:
-                "📍 Nearby workshops:\n\n" +
-                urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-              timestamp: timeNow(),
-            },
-          ]);
-        }
+      // If the backend returned workshop results, show maps_urls from the response
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genId(),
+            sender: "ai",
+            text:
+              "📍 Nearby workshops:\n\n" +
+              data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
+            timestamp: timeNow(),
+          },
+        ]);
       }
     } catch (err) {
       setMessages((prev) => [
