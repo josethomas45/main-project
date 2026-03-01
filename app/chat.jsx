@@ -35,8 +35,7 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getDeviceLocation } from "../utils/location";
-import { fetchWorkshops } from "../utils/workshops";
+
 import { useVehicle } from "../contexts/VehicleContext";
 import Sidebar from "../components/Sidebar";
 
