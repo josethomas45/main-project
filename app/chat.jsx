@@ -277,31 +277,19 @@ export default function Chat() {
         },
       ]);
 
-      if (/workshop|garage|mechanic|service center/i.test(userText)) {
-        const location = await getDeviceLocation();
-        const token = await getToken();
-
-        const workshopData = await fetchWorkshops({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          token,
-        });
-
-        const urls = workshopData?.maps_urls || [];
-
-        if (urls.length) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: genId(),
-              sender: "ai",
-              text:
-                "📍 Nearby workshops:\n\n" +
-                urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-              timestamp: timeNow(),
-            },
-          ]);
-        }
+      // If the backend returned workshop results, show maps_urls from the response
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genId(),
+            sender: "ai",
+            text:
+              "📍 Nearby workshops:\n\n" +
+              data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
+            timestamp: timeNow(),
+          },
+        ]);
       }
     } catch (err) {
       setMessages((prev) => [
