@@ -31,12 +31,11 @@ import Animated, {
   withSequence
 } from "react-native-reanimated";
 import * as Speech from "expo-speech";
-import Voice from "@react-native-voice/voice";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/expo-speech-recognition";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getDeviceLocation } from "../utils/location";
-import { fetchWorkshops } from "../utils/workshops";
+
 import { useVehicle } from "../contexts/VehicleContext";
 import Sidebar from "../components/Sidebar";
 
@@ -144,7 +143,26 @@ export default function Chat() {
   // Voice features state
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
-  const [voiceAvailable, setVoiceAvailable] = useState(false);
+
+  // Threading state
+  const [currentChatId, setCurrentChatId] = useState(chatId || null);
+
+  // Register speech recognition events
+  useSpeechRecognitionEvent("start", () => setIsRecording(true));
+  useSpeechRecognitionEvent("end", () => setIsRecording(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    if (event.results[0]?.transcript) {
+      setMessage(event.results[0].transcript);
+    }
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    console.error("Speech recognition error:", event.error, event.message);
+    setIsRecording(false);
+    Alert.alert(
+      "Speech Recognition Error",
+      "Could not recognize speech. Please try again with less background noise."
+    );
+  });
 
   const flatListRef = useRef(null);
   const msgCounter = useRef(0);
@@ -222,7 +240,10 @@ export default function Chat() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ 
+        message: text,
+        ...(currentChatId && { chat_id: currentChatId })
+      }),
     });
 
     if (!res.ok) throw new Error("Agent failed");
@@ -251,6 +272,11 @@ export default function Chat() {
 
     try {
       const data = await callBackend(userText);
+      
+      // Save chat_id for subsequent messages in this thread
+      if (data.chat_id && !currentChatId) {
+        setCurrentChatId(data.chat_id);
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -262,31 +288,19 @@ export default function Chat() {
         },
       ]);
 
-      if (/workshop|garage|mechanic|service center/i.test(userText)) {
-        const location = await getDeviceLocation();
-        const token = await getToken();
-
-        const workshopData = await fetchWorkshops({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          token,
-        });
-
-        const urls = workshopData?.maps_urls || [];
-
-        if (urls.length) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: genId(),
-              sender: "ai",
-              text:
-                "📍 Nearby workshops:\n\n" +
-                urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-              timestamp: timeNow(),
-            },
-          ]);
-        }
+      // If the backend returned workshop results, show maps_urls from the response as text
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genId(),
+            sender: "ai",
+            text:
+              "📍 Nearby workshops:\n\n" +
+              data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
+            timestamp: timeNow(),
+          },
+        ]);
       }
     } catch (err) {
       setMessages((prev) => [
@@ -306,80 +320,43 @@ export default function Chat() {
   /* =====================
      VOICE FEATURES
   ===================== */
-  // Check if Voice is available and initialize
+  // Permissions check on mount (optional but good for UX)
   useEffect(() => {
-    const initVoice = async () => {
+    const checkPermissions = async () => {
       try {
-        // Check if Voice module is properly initialized
-        const available = await Voice.isAvailable();
-        setVoiceAvailable(available);
-
-        if (available) {
-          Voice.onSpeechStart = () => {
-            setIsRecording(true);
-          };
-
-          Voice.onSpeechEnd = () => {
-            setIsRecording(false);
-          };
-
-          Voice.onSpeechResults = (e) => {
-            if (e.value && e.value[0]) {
-              setMessage(e.value[0]);
-            }
-          };
-
-          Voice.onSpeechError = (e) => {
-            console.error('Speech error:', e);
-            setIsRecording(false);
-            Alert.alert(
-              'Speech Recognition Error',
-              'Could not recognize speech. Please try again with less background noise.'
-            );
-          };
+        const result = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+        if (result.status === "undetermined") {
+          await ExpoSpeechRecognitionModule.requestPermissionsAsync();
         }
-      } catch (error) {
-        console.log('Voice not available:', error);
-        setVoiceAvailable(false);
+      } catch (e) {
+        console.log("Permission check failed:", e);
       }
     };
-
-    initVoice();
-
-    return () => {
-      if (voiceAvailable) {
-        Voice.destroy().then(Voice.removeAllListeners).catch(e => console.log(e));
-      }
-    };
+    checkPermissions();
   }, []);
 
   // Start voice recording
   const startVoiceRecording = async () => {
-    // Check if running in Expo Go (voice not available)
-    if (!voiceAvailable) {
-      Alert.alert(
-        'Voice Input Not Available',
-        'Voice recording requires a custom development build. This feature is not available in Expo Go.\n\nAlternatively, you can:\n• Type your message manually\n• Use the web version with browser speech recognition\n• Build a custom development build with: npx expo prebuild',
-        [
-          { text: 'OK', style: 'default' },
-          {
-            text: 'Learn More',
-            onPress: () => console.log('See docs: https://docs.expo.dev/workflow/prebuild/')
-          }
-        ]
-      );
-      return;
-    }
-
     try {
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
+        Alert.alert(
+          "Permission Denied",
+          "Microphone and speech recognition permissions are required to use voice input."
+        );
+        return;
+      }
+
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await Voice.start('en-US');
-      setIsRecording(true);
+      ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+      });
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      console.error("Failed to start recording:", error);
       Alert.alert(
-        'Recording Error',
-        'Failed to start voice recording. Please check microphone permissions and try again.'
+        "Recording Error",
+        "Failed to start voice recording. Please check microphone permissions and try again."
       );
       setIsRecording(false);
     }
@@ -387,17 +364,12 @@ export default function Chat() {
 
   // Stop voice recording
   const stopVoiceRecording = async () => {
-    if (!voiceAvailable) {
-      setIsRecording(false);
-      return;
-    }
-
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await Voice.stop();
+      ExpoSpeechRecognitionModule.stop();
       setIsRecording(false);
     } catch (error) {
-      console.error('Failed to stop recording:', error);
+      console.error("Failed to stop recording:", error);
       setIsRecording(false);
     }
   };
@@ -828,6 +800,55 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
   },
 
   // ── Input Bar (Floating Glass Composer) ──

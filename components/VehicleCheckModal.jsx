@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -15,73 +16,162 @@ import Animated, {
   FadeInDown,
   ZoomIn,
 } from 'react-native-reanimated';
+import { useAuth } from '@clerk/clerk-expo';
 import { useVehicle } from '../contexts/VehicleContext';
-import { checkOBDConnection, detectVehicleInfo } from '../utils/obdService';
+import { detectVehicleInfo } from '../utils/obdService';
+import BluetoothService from '../utils/BluetoothService';
+import OBDConnectionManager from '../utils/OBDConnectionManager';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 /**
  * VehicleCheckModal Component
  * 
  * Blocking modal that guides users through vehicle registration flow:
  * 1. Check OBD connection
- * 2. Detect VIN
- * 3. Register vehicle with backend
- * 
- * Note: Session checking is handled by VehicleContext before this modal is shown.
- * This modal only appears when no vehicle session exists.
+ * 2. Scan for Bluetooth OBD Devices
+ * 3. Connect to selected device
+ * 4. Detect VIN
+ * 5. Register vehicle with backend
  */
 export default function VehicleCheckModal({ visible, onComplete }) {
   const { identifyVehicle } = useVehicle();
+  const { getToken } = useAuth();
 
   // Flow states
-  const [flowState, setFlowState] = useState('checking_obd'); // checking_obd, detecting_vin, registering, error, success
+  const [flowState, setFlowState] = useState('checking_obd'); // checking_obd, scanning, connecting, detecting_vin, manual_entry, registering, error, success
   const [statusMessage, setStatusMessage] = useState('Checking OBD connection...');
   const [errorMessage, setErrorMessage] = useState(null);
   const [detectedVIN, setDetectedVIN] = useState(null);
   const [detectedModel, setDetectedModel] = useState(null);
+  const [manualVIN, setManualVIN] = useState('');
+  const [devices, setDevices] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
-    if (visible) {
-      // Reset state and start OBD check
-      // Note: We skip session check because VehicleContext already handles it
-      // This modal only shows when there's NO vehicle, so we go straight to OBD
-      setFlowState('checking_obd');
-      setStatusMessage('Checking OBD connection...');
+    if (visible && !loadingRef.current) {
+      // Reset state and start scanning
+      setFlowState('scanning');
+      setStatusMessage('Looking for OBD Devices...');
       setErrorMessage(null);
       setDetectedVIN(null);
       setDetectedModel(null);
+      setManualVIN('');
+      setDevices([]);
       
-      // Start OBD check after a brief delay to let animations settle
+      // Start by listing paired devices, then discover new ones
       setTimeout(() => {
-        checkOBD();
+        loadDevices();
       }, 500);
     }
   }, [visible]);
 
   /**
-   * Check if OBD device is connected
+   * Load paired devices first, then start discovery for new ones.
+   * Discovery runs in the background so paired devices appear instantly.
    */
-  const checkOBD = async () => {
-    setFlowState('checking_obd');
-    setStatusMessage('Checking OBD connection...');
+  const loadDevices = async () => {
+    if (loadingRef.current) return; // Prevent duplicate calls
+    loadingRef.current = true;
+
+    setFlowState('scanning');
+    setStatusMessage('Looking for OBD Devices...');
     setErrorMessage(null);
+    setIsScanning(true);
+    setDevices([]);
 
     try {
-      const isConnected = await checkOBDConnection();
-
-      if (!isConnected) {
+      // 1) Check if Bluetooth is on
+      const btEnabled = await BluetoothService.isBluetoothEnabled();
+      if (!btEnabled) {
         setFlowState('error');
-        setErrorMessage('OBD device not connected');
-        setStatusMessage('Please connect your OBD device to continue');
+        setErrorMessage('Bluetooth is turned off');
+        setStatusMessage('Please enable Bluetooth to continue');
+        setIsScanning(false);
         return;
       }
 
-      // OBD connected, proceed to VIN detection
+      // 2) Request permissions
+      const hasPermission = await BluetoothService.requestPermissions();
+      if (!hasPermission) {
+        setFlowState('error');
+        setErrorMessage('Bluetooth permissions not granted');
+        setStatusMessage('Please grant Bluetooth permissions');
+        setIsScanning(false);
+        return;
+      }
+
+      // 3) Show already-paired devices (ELM327 usually appears here)
+      const paired = await BluetoothService.getPairedDevices();
+      if (paired.length > 0) {
+        setDevices(paired);
+      }
+
+      // 4) Fire discovery in the BACKGROUND — do NOT await
+      //    startDiscovery() blocks for ~12s until complete
+      BluetoothService.startDiscovery((device) => {
+        setDevices(prev => {
+          const addr = device.address || device.id;
+          if (prev.find(d => (d.address || d.id) === addr)) return prev;
+          return [...prev, device];
+        });
+      }).then(() => {
+        setIsScanning(false);
+        loadingRef.current = false;
+      }).catch((err) => {
+        console.warn('Discovery error (non-critical):', err);
+        setIsScanning(false);
+        loadingRef.current = false;
+      });
+
+    } catch (err) {
+      console.error('Device scan error:', err);
+      setIsScanning(false);
+      loadingRef.current = false;
+      setFlowState('error');
+      setErrorMessage(err.message || 'Failed to scan for Bluetooth devices');
+      setStatusMessage('Please try again');
+    }
+  };
+
+
+
+  /**
+   * Connect to a specific device
+   */
+  const connectToDevice = async (device) => {
+    setFlowState('connecting');
+    setStatusMessage(`Connecting to ${device.name || 'device'}...`);
+    setIsScanning(false);
+    await BluetoothService.stopDiscovery();
+
+    try {
+      // Step 1: Bluetooth connect
+      await BluetoothService.connect(device);
+      setStatusMessage('Initializing OBD sensor...');
+
+      // Step 2: Initialize ELM327 (ATZ, ATE0, etc.)
+      await BluetoothService.initializeOBD();
+
+      // Wait for ELM327 to settle after init
+      setStatusMessage('Preparing to read vehicle info...');
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Verify connection is still alive
+      const stillConn = await BluetoothService.isConnected();
+      if (!stillConn) {
+        throw new Error('Connection dropped after OBD initialization');
+      }
+      setStatusMessage('Reading vehicle info...');
+      
+      // Step 3: Detect VIN automatically
       await detectVIN();
     } catch (err) {
-      console.error('OBD check error:', err);
+      console.error('Connection error:', err);
       setFlowState('error');
-      setErrorMessage('Failed to check OBD connection');
-      setStatusMessage('Please try again');
+      setErrorMessage(`Failed to connect: ${err.message || 'Unknown error'}`);
+      setStatusMessage('Connection failed');
     }
   };
 
@@ -97,9 +187,9 @@ export default function VehicleCheckModal({ visible, onComplete }) {
       const { vin, model } = await detectVehicleInfo();
 
       if (!vin) {
-        setFlowState('error');
-        setErrorMessage('Failed to detect VIN');
-        setStatusMessage('Please try again');
+        // Auto-detection failed, switch to manual entry
+        setFlowState('manual_entry');
+        setStatusMessage('Manual VIN Entry Required');
         return;
       }
 
@@ -110,16 +200,16 @@ export default function VehicleCheckModal({ visible, onComplete }) {
       await registerVehicle(vin, model);
     } catch (err) {
       console.error('VIN detection error:', err);
-      setFlowState('error');
-      setErrorMessage('Failed to detect vehicle');
-      setStatusMessage('Please try again');
+      // On detection error, also allow manual entry
+      setFlowState('manual_entry');
+      setStatusMessage('Manual VIN Entry Required');
     }
   };
 
   /**
    * Register vehicle with backend
    */
-  const registerVehicle = async (vin, model) => {
+  const registerVehicle = async (vin, model = null) => {
     setFlowState('registering');
     setStatusMessage('Registering vehicle...');
     setErrorMessage(null);
@@ -130,6 +220,17 @@ export default function VehicleCheckModal({ visible, onComplete }) {
       if (result.success) {
         setFlowState('success');
         setStatusMessage(result.isNew ? 'Vehicle registered!' : 'Welcome back!');
+
+        // Start WebSocket + telemetry streaming immediately
+        try {
+          const token = await getToken();
+          if (token && BACKEND_URL) {
+            OBDConnectionManager.start(token, BACKEND_URL);
+            console.log('[VehicleCheck] OBD streaming started after registration');
+          }
+        } catch (wsErr) {
+          console.warn('[VehicleCheck] Failed to start OBD streaming:', wsErr);
+        }
         
         // Close modal after short delay
         setTimeout(() => {
@@ -149,12 +250,24 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   };
 
   /**
+   * Handle manual VIN submission
+   */
+  const handleManualSubmit = () => {
+    if (manualVIN.length !== 17) {
+      setErrorMessage('VIN must be exactly 17 characters');
+      return;
+    }
+    setDetectedVIN(manualVIN.toUpperCase());
+    registerVehicle(manualVIN.toUpperCase());
+  };
+
+  /**
    * Retry the current step
    */
   const handleRetry = () => {
     if (flowState === 'error') {
-      // Restart from OBD check
-      checkOBD();
+      // Restart from device scanning
+      loadDevices();
     }
   };
 
@@ -163,10 +276,13 @@ export default function VehicleCheckModal({ visible, onComplete }) {
    */
   const getStateIcon = () => {
     switch (flowState) {
-      case 'checking_obd':
+      case 'scanning':
+      case 'connecting':
       case 'detecting_vin':
       case 'registering':
         return { name: 'sync', color: '#6366f1' };
+      case 'manual_entry':
+        return { name: 'create', color: '#6366f1' };
       case 'error':
         return { name: 'warning', color: '#ef4444' };
       case 'success':
@@ -177,7 +293,7 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   };
 
   const stateIcon = getStateIcon();
-  const isLoading = ['checking_obd', 'detecting_vin', 'registering'].includes(flowState);
+  const isLoading = ['detecting_vin', 'registering'].includes(flowState);
 
   return (
     <Modal
@@ -224,8 +340,100 @@ export default function VehicleCheckModal({ visible, onComplete }) {
             {/* Status message */}
             <Text style={styles.statusMessage}>{statusMessage}</Text>
 
-            {/* VIN display (when detected) */}
-            {detectedVIN && (
+            {/* Device List (Scanning) */}
+            {flowState === 'scanning' && (
+              <Animated.View entering={FadeInDown} style={styles.deviceListContainer}>
+                {devices.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    {isScanning ? (
+                      <>
+                        <ActivityIndicator size="small" color="#94a3b8" />
+                        <Text style={styles.emptyText}>Looking for devices...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="bluetooth-outline" size={24} color="#94a3b8" />
+                        <Text style={styles.emptyText}>No devices found</Text>
+                        <TouchableOpacity onPress={() => loadDevices()} style={{ marginTop: 8 }}>
+                          <Text style={{ color: '#6366f1', fontWeight: '600', fontSize: 14 }}>Scan Again</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                ) : (
+                  <>
+                    {devices.map((device) => (
+                      <TouchableOpacity
+                        key={device.address || device.id || device.name}
+                        style={styles.deviceItem}
+                        onPress={() => connectToDevice(device)}
+                      >
+                        <View style={styles.deviceInfo}>
+                          <Ionicons name="bluetooth" size={20} color="#6366f1" />
+                          <View>
+                            <Text style={styles.deviceName}>{device.name || 'Unknown Device'}</Text>
+                            <Text style={{ color: '#64748b', fontSize: 11 }}>{device.address}</Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#475569" />
+                      </TouchableOpacity>
+                    ))}
+                    {!isScanning && (
+                      <TouchableOpacity onPress={() => loadDevices()} style={{ alignSelf: 'center', padding: 8, marginTop: 4 }}>
+                        <Text style={{ color: '#6366f1', fontWeight: '600', fontSize: 13 }}>Scan Again</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </Animated.View>
+            )}
+
+            {/* Manual VIN Input */}
+            {flowState === 'manual_entry' && (
+              <Animated.View 
+                entering={FadeInDown.duration(400)}
+                style={styles.manualEntryContainer}
+              >
+                <TextInput
+                  style={styles.vinInput}
+                  placeholder="Enter 17-char VIN"
+                  placeholderTextColor="#94a3b8"
+                  value={manualVIN}
+                  onChangeText={(text) => {
+                    setManualVIN(text.toUpperCase());
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  maxLength={17}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                
+                <TouchableOpacity
+                  style={styles.submitButton}
+                  onPress={handleManualSubmit}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={['#6366f1', '#8b5cf6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.submitButtonGradient}
+                  >
+                    <Text style={styles.submitButtonText}>Register Vehicle</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => loadDevices()}
+                  style={styles.retryDetectionButton}
+                >
+                  <Text style={styles.retryDetectionText}>Retry Detection</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {/* VIN display (when detected/entered) */}
+            {(detectedVIN && flowState !== 'manual_entry') && (
               <View style={styles.vinContainer}>
                 <Text style={styles.vinLabel}>VIN Detected</Text>
                 <Text style={styles.vinText}>{detectedVIN}</Text>
@@ -260,9 +468,9 @@ export default function VehicleCheckModal({ visible, onComplete }) {
             )}
 
             {/* Info text */}
-            {flowState === 'checking_obd' && (
+            {flowState === 'scanning' && (
               <Text style={styles.infoText}>
-                Make sure your OBD device is properly connected to the vehicle
+                Make sure your OBD device is plugged in and Bluetooth is on
               </Text>
             )}
           </Animated.View>
@@ -409,5 +617,85 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#f1f5f9',
+  },
+  // ── Bluetooth Scanning ──
+  deviceListContainer: {
+    width: '100%',
+    maxHeight: 200,
+    marginTop: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    borderRadius: 16,
+    padding: 8,
+  },
+  deviceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(148, 163, 184, 0.1)',
+  },
+  deviceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  deviceName: {
+    color: '#f1f5f9',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyText: {
+    color: '#94a3b8',
+    fontSize: 14,
+  },
+  // ── Manual Entry ──
+  manualEntryContainer: {
+    width: '100%',
+    marginTop: 8,
+    gap: 16,
+  },
+  vinInput: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.3)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: '#f1f5f9',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
+  submitButton: {
+    width: '100%',
+  },
+  submitButtonGradient: {
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  retryDetectionButton: {
+    alignSelf: 'center',
+    padding: 8,
+  },
+  retryDetectionText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

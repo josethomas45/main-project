@@ -10,6 +10,35 @@ export const useVehicleSession = () => {
   const { getToken } = useAuth();
 
   /**
+   * Helper to format API errors into strings
+   */
+  const formatErrorMessage = (errorData, defaultMessage) => {
+    if (!errorData) return defaultMessage;
+    
+    // If detail is a string, return it
+    if (typeof errorData.detail === 'string') {
+      return errorData.detail;
+    }
+    
+    // If detail is an array (Pydantic validation errors), format them
+    if (Array.isArray(errorData.detail)) {
+      try {
+        return errorData.detail
+          .map(err => {
+            const field = err.loc ? err.loc[err.loc.length - 1] : 'Error';
+            return `${field}: ${err.msg}`;
+          })
+          .join(', ');
+      } catch (e) {
+        return defaultMessage;
+      }
+    }
+    
+    // Fallback to default
+    return defaultMessage;
+  };
+
+  /**
    * Check if user has an active vehicle session
    * @returns {Promise<{exists: boolean, vehicle: object|null, error: string|null}>}
    */
@@ -51,7 +80,7 @@ export const useVehicleSession = () => {
       return { 
         exists: false, 
         vehicle: null, 
-        error: errorData.detail || 'Failed to check vehicle session' 
+        error: formatErrorMessage(errorData, 'Failed to check vehicle session') 
       };
     } catch (err) {
       console.error('❌ Network error:', err);
@@ -115,23 +144,12 @@ export const useVehicleSession = () => {
         };
       }
 
-      if (response.status === 422) {
-        const errorData = await response.json().catch(() => ({}));
-        return { 
-          success: false, 
-          vehicle: null, 
-          isNew: false, 
-          error: errorData.detail || 'Invalid VIN format' 
-        };
-      }
-
-      // Other errors
       const errorData = await response.json().catch(() => ({}));
       return { 
         success: false, 
         vehicle: null, 
         isNew: false, 
-        error: errorData.detail || 'Failed to identify vehicle' 
+        error: formatErrorMessage(errorData, 'Failed to identify vehicle') 
       };
     } catch (err) {
       console.error('Identify vehicle error:', err);
@@ -176,7 +194,7 @@ export const useVehicleSession = () => {
       return { 
         success: false, 
         vehicles: [], 
-        error: errorData.detail || 'Failed to fetch vehicles' 
+        error: formatErrorMessage(errorData, 'Failed to fetch vehicles') 
       };
     } catch (err) {
       console.error('List vehicles error:', err);
@@ -231,7 +249,7 @@ export const useVehicleSession = () => {
       return { 
         success: false, 
         vehicleId: null, 
-        error: errorData.detail || 'Failed to switch vehicle' 
+        error: formatErrorMessage(errorData, 'Failed to switch vehicle') 
       };
     } catch (err) {
       console.error('Switch vehicle error:', err);
