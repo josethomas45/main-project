@@ -54,22 +54,14 @@ function _connect() {
     return;
   }
 
-  const wsUrl = _buildWsUrl(_backendUrl);
-  console.log('[OBDManager] Connecting to WebSocket:', wsUrl);
+  const wsUrl = `${_buildWsUrl(_backendUrl)}?token=${encodeURIComponent(_token)}`;
+  console.log('[OBDManager] Connecting to WebSocket:', _buildWsUrl(_backendUrl));
 
   _ws = new WebSocket(wsUrl);
 
   _ws.onopen = () => {
-    console.log('[OBDManager] ✅ WebSocket connected');
+    console.log('[OBDManager] ✅ WebSocket connected & authenticated');
     _notifyStatus(true);
-
-    // Authenticate
-    try {
-      _ws.send(JSON.stringify({ type: 'auth', token: _token }));
-      console.log('[OBDManager] Auth sent');
-    } catch (err) {
-      console.error('[OBDManager] Failed to send auth:', err);
-    }
 
     // Start OBD data streaming
     registerBluetoothBridge(_ws);
