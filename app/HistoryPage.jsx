@@ -36,6 +36,7 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/
 import * as Haptics from "expo-haptics";
 import Sidebar from "../components/Sidebar";
 import { useVehicle } from "../contexts/VehicleContext";
+import { getDeviceLocation } from "../utils/location";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -70,6 +71,16 @@ export default function ChatHistory() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  // Background location for discovery
+  const [location, setLocation] = useState(null);
+
+  // Fetch location once on mount
+  useEffect(() => {
+    getDeviceLocation()
+      .then((loc) => setLocation(loc))
+      .catch((err) => console.log("Background location fetch failed:", err));
+  }, []);
 
   // Voice features state
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
@@ -448,7 +459,11 @@ export default function ChatHistory() {
         },
         body: JSON.stringify({ 
           message: userText,
-          ...((selectedChat?.id || params.chatId) && { chat_id: selectedChat?.id || params.chatId })
+          chat_id: selectedChat?.id || params.chatId || null,
+          ...(location && {
+            latitude: location.latitude,
+            longitude: location.longitude,
+          })
         }),
       });
 

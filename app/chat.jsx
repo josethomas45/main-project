@@ -38,6 +38,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useVehicle } from "../contexts/VehicleContext";
 import Sidebar from "../components/Sidebar";
+import { getDeviceLocation } from "../utils/location";
 
 /* =====================
    ENV GUARD
@@ -102,6 +103,14 @@ function formatAIResponse(data) {
     text += "\n";
   }
 
+  if (Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+    text += "📍 Nearby Workshops:\n";
+    data.maps_urls.forEach((url, i) => {
+      text += `${i + 1}. ${url}\n`;
+    });
+    text += "\n";
+  }
+
   return text.trim() || "⚠️ No response from agent";
 }
 
@@ -146,6 +155,16 @@ export default function Chat() {
 
   // Threading state
   const [currentChatId, setCurrentChatId] = useState(chatId || null);
+
+  // Background location for discovery
+  const [location, setLocation] = useState(null);
+
+  // Fetch location once on mount
+  useEffect(() => {
+    getDeviceLocation()
+      .then(loc => setLocation(loc))
+      .catch(err => console.log("Background location fetch failed:", err));
+  }, []);
 
   // Register speech recognition events
   useSpeechRecognitionEvent("start", () => setIsRecording(true));
@@ -242,7 +261,11 @@ export default function Chat() {
       },
       body: JSON.stringify({ 
         message: text,
-        ...(currentChatId && { chat_id: currentChatId })
+        chat_id: currentChatId || null,
+        ...(location && {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        })
       }),
     });
 
