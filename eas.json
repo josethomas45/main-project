@@ -14,6 +14,9 @@
     "demo": {
       "distribution": "internal"
     },
+    "actual": {
+      "distribution": "internal"
+    },
     "production": {
       "autoIncrement": true
     }
