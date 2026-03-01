@@ -278,30 +278,22 @@ export default function Chat() {
         setCurrentChatId(data.chat_id);
       }
 
+      let aiText = formatAIResponse(data);
+
+      // If the backend returned workshop results, append maps_urls to the main response
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        aiText += "\n\n📍 Nearby workshops:\n" + data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n");
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           id: data.chat_id ?? genId(),
           sender: "ai",
-          text: formatAIResponse(data),
+          text: aiText,
           timestamp: timeNow(),
         },
       ]);
-
-      // If the backend returned workshop results, show maps_urls from the response as text
-      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genId(),
-            sender: "ai",
-            text:
-              "📍 Nearby workshops:\n\n" +
-              data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-            timestamp: timeNow(),
-          },
-        ]);
-      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
