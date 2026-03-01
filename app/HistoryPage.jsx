@@ -296,7 +296,6 @@ export default function ChatHistory() {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
-              maps_urls: mapsUrls,
             });
           }
 
@@ -491,9 +490,24 @@ export default function ChatHistory() {
           hour: "2-digit",
           minute: "2-digit",
         }),
-        maps_urls: data.maps_urls || null,
       };
       setChatMessages((prev) => [...prev, aiMsg]);
+
+      // If the backend returned workshop results, show maps_urls from the response as text
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        const workshopMsg = {
+          id: `workshops-${Date.now()}`,
+          sender: "ai",
+          text:
+            "📍 Nearby workshops:\n\n" +
+            data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+        setChatMessages((prev) => [...prev, workshopMsg]);
+      }
     } catch (err) {
       console.error("Send message error:", err);
       const errorMsg = {
@@ -663,39 +677,6 @@ export default function ChatHistory() {
             {speakingMessageId === item.id && (
               <View style={styles.speakingIndicator}>
                 <Text style={styles.speakingText}>🔊 Playing...</Text>
-              </View>
-            )}
-
-            {/* Workshop Cards */}
-            {item.maps_urls && item.maps_urls.length > 0 && (
-              <View style={styles.workshopContainer}>
-                <Text style={styles.workshopHeader}>📍 Discovery Results:</Text>
-                <FlatList
-                  horizontal
-                  data={item.maps_urls}
-                  keyExtractor={(u, i) => `map-${i}`}
-                  showsHorizontalScrollIndicator={false}
-                  renderItem={({ item: url, index }) => (
-                    <TouchableOpacity
-                      style={styles.workshopCard}
-                      onPress={() => Linking.openURL(url)}
-                      activeOpacity={0.8}
-                    >
-                      <LinearGradient
-                        colors={["#475569", "#1e293b"]}
-                        style={styles.workshopCardGradient}
-                      >
-                        <Ionicons name="map-outline" size={24} color="#a5b4fc" />
-                        <Text style={styles.workshopCardTitle}>Workshop #{index + 1}</Text>
-                        <View style={styles.openMapButton}>
-                          <Text style={styles.openMapText}>Open Maps</Text>
-                          <Ionicons name="chevron-forward" size={14} color="#6366f1" />
-                        </View>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  )}
-                  contentContainerStyle={styles.workshopList}
-                />
               </View>
             )}
           </View>
