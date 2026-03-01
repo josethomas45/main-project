@@ -482,32 +482,23 @@ export default function ChatHistory() {
         aiText += "\n";
       }
 
+      let finalAiText = aiText.trim() || "⚠️ No response from agent";
+
+      // If the backend returned workshop results, append maps_urls to the main response
+      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+        finalAiText += "\n\n📍 Nearby workshops:\n" + data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n");
+      }
+
       const aiMsg = {
         id: data.chat_id || `ai-${Date.now()}`,
         sender: "ai",
-        text: aiText.trim() || "⚠️ No response from agent",
+        text: finalAiText,
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         }),
       };
       setChatMessages((prev) => [...prev, aiMsg]);
-
-      // If the backend returned workshop results, show maps_urls from the response as text
-      if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
-        const workshopMsg = {
-          id: `workshops-${Date.now()}`,
-          sender: "ai",
-          text:
-            "📍 Nearby workshops:\n\n" +
-            data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n"),
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        };
-        setChatMessages((prev) => [...prev, workshopMsg]);
-      }
     } catch (err) {
       console.error("Send message error:", err);
       const errorMsg = {
