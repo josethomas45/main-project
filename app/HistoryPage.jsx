@@ -449,7 +449,7 @@ export default function ChatHistory() {
         },
         body: JSON.stringify({ 
           message: userText,
-          chat_id: selectedChat?.id || params.chatId
+          ...((selectedChat?.id || params.chatId) && { chat_id: selectedChat?.id || params.chatId })
         }),
       });
 
