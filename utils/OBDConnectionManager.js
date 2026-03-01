@@ -9,7 +9,7 @@
  *   import OBDConnectionManager from '../utils/OBDConnectionManager';
  *   OBDConnectionManager.start(token, backendUrl);
  */
-import { registerBluetoothBridge, startTelemetryLoop, stopTelemetryLoop } from './obdService';
+import { startTelemetryLoop, stopTelemetryLoop } from './obdService';
 
 // ─── Singleton state ────────────────────────────────────────
 
@@ -63,8 +63,11 @@ function _connect() {
     console.log('[OBDManager] ✅ WebSocket connected & authenticated');
     _notifyStatus(true);
 
-    // Start OBD data streaming
-    registerBluetoothBridge(_ws);
+    // Start OBD telemetry streaming (sends structured data to backend)
+    // Note: registerBluetoothBridge is intentionally NOT called here —
+    // it sets up a permanent data listener that conflicts with
+    // sendCommandWithResponse(), causing JS thread churn that blocks UI touches.
+    // The telemetry loop already sends all OBD data in structured format.
     startTelemetryLoop(_ws);
   };
 
