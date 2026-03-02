@@ -4,22 +4,38 @@
  */
 
 const MOCK_VINS = [
-  '1HGBH41JXMN109186', // Honda Accord
-  '1FTFW1ET5EFA12345', // Ford F-150
-  '6YJSA1E26HF000001', // Tesla Model S
-  'WBA3B3G5XFK000002', // BMW 3 Series
-  'WAUZZZ8T0GA000003', // Audi A5
+  '1HGBH41JXMN', // Honda Accord prefix
+  '1FTFW1ET5EF', // Ford F-150 prefix
+  '6YJSA1E26HF', // Tesla Model S prefix
+  'WBA3B3G5XFK', // BMW 3 Series prefix
+  'WAUZZZ8T0GA', // Audi A5 prefix
 ];
 
 let currentIndex = 0;
 
 /**
- * Returns the next VIN in the list, rotating back to the start.
+ * Generates a random alphanumeric string of a given length.
+ */
+const generateRandomSuffix = (length) => {
+  const chars = '0123456789ABCDEFGHJKLMNPRSTUVWXYZ';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+/**
+ * Returns the next VIN in the list with a randomized suffix to avoid backend collisions.
  */
 export const getNextVIN = () => {
-  const vin = MOCK_VINS[currentIndex];
+  const prefix = MOCK_VINS[currentIndex];
   currentIndex = (currentIndex + 1) % MOCK_VINS.length;
-  console.log(`[DemoVIN] Rotating to next VIN: ${vin} (Index: ${currentIndex})`);
+  
+  // Create a 17-character VIN by appending a random 6-character suffix
+  const vin = `${prefix}${generateRandomSuffix(6)}`;
+  
+  console.log(`[DemoVIN] Generated unique VIN: ${vin} (Base Index: ${currentIndex})`);
   return vin;
 };
 
