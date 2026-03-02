@@ -444,7 +444,8 @@ export default function MaintenanceTracking() {
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : "padding"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
           <View style={styles.modalBackdrop}>
             <TouchableOpacity
@@ -453,7 +454,7 @@ export default function MaintenanceTracking() {
               onPress={() => setShowAddModal(false)}
             />
 
-            <Animated.View entering={FadeInUp.duration(400)} style={styles.modalSheet}>
+            <View style={styles.modalSheet}>
             <View style={styles.sheetHandle} />
 
             <Text style={styles.modalTitle}>
@@ -552,7 +553,7 @@ export default function MaintenanceTracking() {
                 </LinearGradient>
               </TouchableOpacity>
             </ScrollView>
-            </Animated.View>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
