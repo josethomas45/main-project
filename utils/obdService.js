@@ -81,35 +81,43 @@ export const readDTCs = async () => {
 
 /**
  * Simulates telemetry polling
+ * Returns a cleanup function to stop the loop.
  */
 export const startTelemetryLoop = (ws) => {
-  console.log('[OBD] Starting simulated telemetry loop...');
+  console.log('[OBD] Starting simulated telemetry loop (5s interval)...');
   let running = true;
   
   const poll = async () => {
     while (running) {
       if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({
-          type: 'obd_telemetry',
-          data: {
-            rpm: 2000 + Math.random() * 500,
-            speed: 60 + Math.random() * 10,
-            coolant_temp: 90,
-            engine_load: 25,
-          },
-          timestamp: new Date().toISOString()
-        }));
+        try {
+          ws.send(JSON.stringify({
+            type: 'obd_telemetry',
+            data: {
+              rpm: 2000 + Math.random() * 500,
+              speed: 60 + Math.random() * 10,
+              coolant_temp: 90,
+              engine_load: 25,
+            },
+            timestamp: new Date().toISOString()
+          }));
+        } catch (err) {
+          console.warn('[OBD] Failed to send telemetry:', err.message);
+        }
       }
-      await delay(2000);
+      await delay(5000); // Increased to 5s to reduce JS thread load
     }
   };
   
   poll();
-  return () => { running = false; };
+  return () => { 
+    console.log('[OBD] Telemetry loop stopped via cleanup');
+    running = false; 
+  };
 };
 
 export const stopTelemetryLoop = () => {
-  console.log('[OBD] Stopping simulated telemetry loop');
+  console.log('[OBD] stopTelemetryLoop called (manager should handle cleanup)');
 };
 
 export const registerBluetoothBridge = (ws) => {

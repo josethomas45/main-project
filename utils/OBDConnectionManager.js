@@ -18,6 +18,7 @@ let _reconnectTimer = null;
 let _token = null;
 let _backendUrl = null;
 let _running = false;
+let _telemetryCleanup = null;
 
 // Listeners
 const _statusListeners = new Set();
@@ -63,12 +64,12 @@ function _connect() {
     console.log('[OBDManager] ✅ WebSocket connected & authenticated');
     _notifyStatus(true);
 
-    // Start OBD telemetry streaming (sends structured data to backend)
-    // Note: registerBluetoothBridge is intentionally NOT called here —
-    // it sets up a permanent data listener that conflicts with
-    // sendCommandWithResponse(), causing JS thread churn that blocks UI touches.
-    // The telemetry loop already sends all OBD data in structured format.
-    startTelemetryLoop(_ws);
+    // Start OBD telemetry streaming
+    if (_telemetryCleanup) {
+      console.log('[OBDManager] Stopping previous telemetry loop before starting new one');
+      _telemetryCleanup();
+    }
+    _telemetryCleanup = startTelemetryLoop(_ws);
   };
 
   _ws.onmessage = (event) => {
@@ -105,7 +106,10 @@ function _disconnect() {
     clearTimeout(_reconnectTimer);
     _reconnectTimer = null;
   }
-  stopTelemetryLoop();
+  if (_telemetryCleanup) {
+    _telemetryCleanup();
+    _telemetryCleanup = null;
+  }
   if (_ws) {
     try { _ws.close(); } catch { /* ignore */ }
     _ws = null;

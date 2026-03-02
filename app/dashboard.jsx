@@ -54,7 +54,9 @@ export default function Dashboard() {
     const [switchingId, setSwitchingId] = useState(null);
 
     useEffect(() => {
+        console.log("DASHBOARD: Mounted");
         loadVehicles();
+        return () => console.log("DASHBOARD: Unmounted");
     }, []);
 
     const loadVehicles = async () => {
@@ -98,9 +100,15 @@ export default function Dashboard() {
     const [showMenu, setShowMenu] = useState(false);
     const [recentActivity, setRecentActivity] = useState([]);
     const [activityLoading, setActivityLoading] = useState(true);
+    const activityFetchInProgress = useRef(false);
 
     useEffect(() => {
         const loadActivity = async () => {
+            if (activityFetchInProgress.current) return;
+            activityFetchInProgress.current = true;
+            console.log("DASHBOARD: Loading activity sources...");
+            setActivityLoading(true);
+
             try {
                 const token = await getToken();
                 const headers = { Authorization: `Bearer ${token}` };
@@ -164,9 +172,11 @@ export default function Dashboard() {
                 items.sort((a, b) => new Date(b.date) - new Date(a.date));
                 setRecentActivity(items.slice(0, 3));
             } catch (err) {
-                console.error("Failed to load recent activity:", err);
+                console.error("DASHBOARD: Activity load error:", err);
             } finally {
+                console.log("DASHBOARD: Activity load completed");
                 setActivityLoading(false);
+                activityFetchInProgress.current = false;
             }
         };
 
