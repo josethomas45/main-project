@@ -114,7 +114,8 @@ export default function Chat() {
   const { signOut, getToken } = useAuth();
   const { user } = useUser();
   const router = useRouter();
-  const { chatId } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const { chatId } = params;
   const { clearVehicle } = useVehicle();
   const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
