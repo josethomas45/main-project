@@ -32,8 +32,11 @@ export const getNextVIN = () => {
   const prefix = MOCK_VINS[currentIndex];
   currentIndex = (currentIndex + 1) % MOCK_VINS.length;
   
-  // Create a 17-character VIN by appending a random 6-character suffix
-  const vin = `${prefix}${generateRandomSuffix(6)}`;
+  // Create a 17-character VIN by appending a random 10-character suffix
+  // Note: Standard VINs are 17 chars. Prefixes here are vary in length.
+  // We'll ensure the final length is exactly 17.
+  const suffixLength = 17 - prefix.length;
+  const vin = `${prefix}${generateRandomSuffix(suffixLength)}`;
   
   console.log(`[DemoVIN] Generated unique VIN: ${vin} (Base Index: ${currentIndex})`);
   return vin;
