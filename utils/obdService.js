@@ -44,6 +44,7 @@ export const readDTCs = async () => {
       id: 'dtc-123',
       code: 'P0301',
       metric: 'engine_misfire',
+      trigger_metric: 'engine_misfire',
       message: 'Cylinder 1 Misfire Detected',
       severity: 'high',
       status: 'open',
@@ -62,6 +63,7 @@ export const readDTCs = async () => {
       id: 'dtc-456',
       code: 'P0118',
       metric: 'coolant_temp',
+      trigger_metric: 'coolant_temp',
       message: 'Engine Coolant Temperature Circuit High',
       severity: 'medium',
       status: 'open',
@@ -75,7 +77,64 @@ export const readDTCs = async () => {
         engine_load: 40,
         voltage: '13.2V'
       }
-    }
+    },
+    {
+      id: 'dtc-789',
+      code: 'P0562',
+      metric: 'battery_voltage',
+      trigger_metric: 'battery_voltage',
+      message: 'System Voltage Low',
+      severity: 'medium',
+      status: 'open',
+      trigger_value: '11.4V',
+      trigger_limit: '12.0V',
+      created_at: new Date(Date.now() - 7200000).toISOString(),
+      snapshot: {
+        rpm: 850,
+        speed: 0,
+        coolant_temp: 82,
+        engine_load: 15,
+        voltage: '11.4V'
+      }
+    },
+    {
+      id: 'dtc-1011',
+      code: 'P0136',
+      metric: 'o2_sensor',
+      trigger_metric: 'o2_sensor',
+      message: 'O2 Sensor Circuit Malfunction (Bank 1, Sensor 2)',
+      severity: 'low',
+      status: 'open',
+      trigger_value: '0.1V',
+      trigger_limit: '0.45V',
+      created_at: new Date(Date.now() - 86400000).toISOString(),
+      snapshot: {
+        rpm: 2500,
+        speed: 80,
+        coolant_temp: 90,
+        engine_load: 55,
+        fuel_trim: '-3%'
+      }
+    },
+    {
+      id: 'dtc-1213',
+      code: 'P0122',
+      metric: 'throttle_position',
+      trigger_metric: 'throttle_position',
+      message: 'Throttle Position Sensor Circuit Low Input',
+      severity: 'high',
+      status: 'open',
+      trigger_value: '0.2V',
+      trigger_limit: '0.5V',
+      created_at: new Date(Date.now() - 172800000).toISOString(),
+      snapshot: {
+        rpm: 1800,
+        speed: 30,
+        coolant_temp: 88,
+        engine_load: 70,
+        throttle_pos: '4%'
+      }
+    },
   ];
 };
 
