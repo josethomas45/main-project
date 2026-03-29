@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { InteractionManager } from "react-native";
 import {
     ActivityIndicator,
     Alert,
@@ -51,18 +52,13 @@ export default function Dashboard() {
     const [switchingId, setSwitchingId] = useState(null);
 
     useEffect(() => {
-        console.log("DASHBOARD: Mounted");
         loadVehicles();
-        return () => console.log("DASHBOARD: Unmounted");
     }, []);
 
     const loadVehicles = async () => {
-        console.log("DASHBOARD: Loading vehicles...");
         try {
             const res = await listVehicles();
-            if (res.success) {
-                setVehicles(res.vehicles);
-            }
+            if (res.success) setVehicles(res.vehicles);
         } catch (error) {
             console.error("Failed to load vehicles:", error);
         } finally {
@@ -98,19 +94,26 @@ export default function Dashboard() {
     const [recentActivity, setRecentActivity] = useState([]);
     const [activityLoading, setActivityLoading] = useState(true);
     const activityFetchInProgress = useRef(false);
+    const lastFetchedVehicleId = useRef(undefined); // track last fetched vehicle
 
     useEffect(() => {
-        const loadActivity = async () => {
-            if (activityFetchInProgress.current) return;
-            activityFetchInProgress.current = true;
-            console.log("DASHBOARD: Loading activity sources...");
-            setActivityLoading(true);
+        const vehicleId = currentVehicle?.id;
 
+        // Skip if we already fetched for this exact vehicle id
+        if (lastFetchedVehicleId.current === vehicleId) return;
+        lastFetchedVehicleId.current = vehicleId;
+
+        if (activityFetchInProgress.current) return;
+        activityFetchInProgress.current = true;
+        setActivityLoading(true);
+
+        // Defer the 3 network fetches until after any ongoing animations finish
+        // This keeps the JS thread free during page transitions and mount animations
+        const task = InteractionManager.runAfterInteractions(async () => {
             try {
                 const token = await getToken();
                 const headers = { Authorization: `Bearer ${token}` };
 
-                // Fetch all 3 sources in parallel, fail gracefully
                 const [chatsRes, incidentsRes, maintenanceRes] = await Promise.allSettled([
                     fetch(`${BACKEND_URL}/chat/history`, { headers }),
                     fetch(`${BACKEND_URL}/incidents/history`, { headers }),
@@ -165,19 +168,20 @@ export default function Dashboard() {
                     }));
                 }
 
-                // Sort newest first, keep top 3
                 items.sort((a, b) => new Date(b.date) - new Date(a.date));
                 setRecentActivity(items.slice(0, 3));
             } catch (err) {
                 console.error("DASHBOARD: Activity load error:", err);
             } finally {
-                console.log("DASHBOARD: Activity load completed");
                 setActivityLoading(false);
                 activityFetchInProgress.current = false;
             }
-        };
+        });
 
-        loadActivity();
+        return () => {
+            task.cancel();
+            activityFetchInProgress.current = false;
+        };
     }, [currentVehicle?.id]);
 
 
