@@ -127,7 +127,7 @@ function MetricItem({ icon, label, value, unit, color, bgColor, barPct }) {
   useEffect(() => {
     Animated.timing(barAnim, {
       toValue: barPct,
-      duration: 500,
+      duration: 300, // shortened: completes fast, reduces JS thread pressure
       useNativeDriver: false,
     }).start();
   }, [barPct]);
@@ -321,27 +321,22 @@ export default function CarLiveMonitoring() {
   const [elapsed, setElapsed] = useState(0);
 
   const intervalRef = useRef(null);
-  const elapsedRef = useRef(null);
+  // Single interval drives both data refresh and elapsed counter
+  // — reduces from 2 setIntervals to 1, cutting JS thread wakeups by half
+  const elapsedRef = useRef(0);
 
-  // Live data simulation
   useEffect(() => {
-    if (isLive) {
-      intervalRef.current = setInterval(() => {
-        setMetrics((prev) => generateMetrics(prev));
-      }, 1500);
-    } else {
+    if (!isLive) {
       clearInterval(intervalRef.current);
+      return;
     }
+    intervalRef.current = setInterval(() => {
+      setMetrics((prev) => generateMetrics(prev));
+      elapsedRef.current += 2; // 2s tick
+      setElapsed(elapsedRef.current);
+    }, 2500); // 2.5s: enough to feel live, light on the JS thread
     return () => clearInterval(intervalRef.current);
   }, [isLive]);
-
-  // Session timer
-  useEffect(() => {
-    elapsedRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(elapsedRef.current);
-  }, []);
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -421,6 +416,7 @@ export default function CarLiveMonitoring() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
       >
         {/* Vehicle banner */}
         <View style={styles.vehicleBanner}>

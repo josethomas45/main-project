@@ -18,9 +18,6 @@ import Animated, {
     FadeInDown,
     FadeInUp,
     ZoomIn,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
 
@@ -183,22 +180,6 @@ export default function Dashboard() {
         loadActivity();
     }, [currentVehicle?.id]);
 
-    // Press animation helper
-    const createPressAnimation = () => {
-        const scale = useSharedValue(1);
-        const animatedStyle = useAnimatedStyle(() => ({
-            transform: [{ scale: scale.value }],
-        }));
-
-        const onPressIn = () => {
-            scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
-        };
-        const onPressOut = () => {
-            scale.value = withSpring(1, { damping: 15, stiffness: 400 });
-        };
-
-        return { animatedStyle, onPressIn, onPressOut };
-    };
 
     // Quick actions data
     const quickActions = [
@@ -301,6 +282,7 @@ export default function Dashboard() {
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
+                removeClippedSubviews={true}
             >
                 {/* Hero Header Section */}
                 <Animated.View entering={FadeInDown.duration(700)} style={styles.heroSection}>
@@ -356,41 +338,35 @@ export default function Dashboard() {
                     </Animated.View>
 
                     <View style={styles.actionsGrid}>
-                        {quickActions.map((action, index) => {
-                            const { animatedStyle, onPressIn, onPressOut } = createPressAnimation();
-
-                            return (
-                                <Animated.View
-                                    key={action.id}
-                                    entering={FadeInUp.duration(700).delay(300 + index * 80)}
-                                    style={[styles.actionCardWrapper, animatedStyle]}
+                        {quickActions.map((action, index) => (
+                            <Animated.View
+                                key={action.id}
+                                entering={FadeInUp.duration(700).delay(300 + index * 80)}
+                                style={styles.actionCardWrapper}
+                            >
+                                <TouchableOpacity
+                                    activeOpacity={0.75}
+                                    onPress={() => router.push(action.route)}
                                 >
-                                    <TouchableOpacity
-                                        activeOpacity={0.7}
-                                        onPressIn={onPressIn}
-                                        onPressOut={onPressOut}
-                                        onPress={() => router.push(action.route)}
-                                    >
-                                        <View style={styles.actionCard}>
-                                            <LinearGradient
-                                                colors={action.colors}
-                                                start={{ x: 0, y: 0 }}
-                                                end={{ x: 1, y: 1 }}
-                                                style={styles.actionIconContainer}
-                                            >
-                                                <Ionicons name={action.icon} size={26} color="#ffffff" />
-                                            </LinearGradient>
+                                    <View style={styles.actionCard}>
+                                        <LinearGradient
+                                            colors={action.colors}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={styles.actionIconContainer}
+                                        >
+                                            <Ionicons name={action.icon} size={26} color="#ffffff" />
+                                        </LinearGradient>
 
-                                            <Text style={styles.actionTitle}>{action.title}</Text>
+                                        <Text style={styles.actionTitle}>{action.title}</Text>
 
-                                            <View style={styles.actionArrow}>
-                                                <Ionicons name="arrow-forward" size={16} color="#64748b" />
-                                            </View>
+                                        <View style={styles.actionArrow}>
+                                            <Ionicons name="arrow-forward" size={16} color="#64748b" />
                                         </View>
-                                    </TouchableOpacity>
-                                </Animated.View>
-                            );
-                        })}
+                                    </View>
+                                </TouchableOpacity>
+                            </Animated.View>
+                        ))}
                     </View>
                 </View>
 
