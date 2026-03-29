@@ -416,7 +416,6 @@ export default function CarLiveMonitoring() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews={true}
       >
         {/* Vehicle banner */}
         <View style={styles.vehicleBanner}>

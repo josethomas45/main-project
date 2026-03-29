@@ -234,6 +234,7 @@ export default function Dashboard() {
             <LinearGradient
                 colors={["#1e293b", "#0f172a", "#0f172a"]}
                 style={styles.backgroundGradient}
+                pointerEvents="none"
             />
 
             {/* Popup Menu Modal */}
@@ -286,7 +287,6 @@ export default function Dashboard() {
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
-                removeClippedSubviews={true}
             >
                 {/* Hero Header Section */}
                 <Animated.View entering={FadeInDown.duration(700)} style={styles.heroSection}>
@@ -395,12 +395,7 @@ export default function Dashboard() {
                             <Text style={{ color: "#94a3b8" }}>No vehicles found</Text>
                         </View>
                     ) : (
-                        <ScrollView
-                            style={styles.vehicleScrollList}
-                            nestedScrollEnabled
-                            showsVerticalScrollIndicator={false}
-                        >
-                            <View style={{ gap: 12 }}>
+                        <View style={{ gap: 12 }}>
                                 {vehicles.map((v) => {
                                     const isActive = currentVehicle?.id === v.id;
                                     const isSwitching = switchingId === v.id;
@@ -454,8 +449,7 @@ export default function Dashboard() {
                                         </View>
                                     );
                                 })}
-                            </View>
-                        </ScrollView>
+                        </View>
                     )}
                 </Animated.View>
 
