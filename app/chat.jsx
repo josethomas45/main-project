@@ -62,6 +62,15 @@ function timeNow() {
   });
 }
 
+function formatMetricName(metric) {
+  if (!metric) return "Unknown";
+  return metric
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 /* =====================
    FORMAT AGENT RESPONSE
 ===================== */
@@ -131,14 +140,22 @@ export default function Chat() {
   }, []);
 
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([
-    {
-      id: "welcome",
-      sender: "ai",
-      text: `Hi ${user?.firstName || "there"} — how can I help with your vehicle today?`,
-      timestamp: timeNow(),
-    },
-  ]);
+
+  // Build the initial message list — if launched from an issue we skip the
+  // generic welcome; the issue useEffect will inject its own opener.
+  const hasIssueContext = !!params.issue_context;
+  const [messages, setMessages] = useState(
+    hasIssueContext
+      ? [] // issue useEffect populates this
+      : [
+          {
+            id: "welcome",
+            sender: "ai",
+            text: `Hi ${user?.firstName || "there"} — how can I help with your vehicle today?`,
+            timestamp: timeNow(),
+          },
+        ]
+  );
   const [isSending, setIsSending] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   
@@ -165,21 +182,97 @@ export default function Chat() {
     fetchLocation();
   }, []);
 
-  // Handle auto-starting conversation from Issue Context (Demo Mode)
+  // Handle auto-starting conversation from Issue Context
   useEffect(() => {
-    if (params.issue_context) {
-      try {
-        const context = JSON.parse(params.issue_context);
-        if (context.initial_query) {
-          // Send the initial analysis request automatically
-          console.log("[Chat] Auto-starting diagnostic for issue:", context.code);
-          setTimeout(() => {
-            sendMessage(context.initial_query);
-          }, 500);
+    if (!params.issue_context) return;
+    try {
+      const context = JSON.parse(params.issue_context);
+
+      // --- Step 1: Show an AI intro bubble immediately (no user message) ---
+      const snapshotLines = Object.entries(context.snapshot || {})
+        .map(([k, v]) => `  • ${formatMetricName(k)}: ${v}`)
+        .join("\n");
+
+      const introText =
+        `🚨 Issue Detected: ${context.message || context.code}\n\n` +
+        `📟 Error Code: ${context.code}\n` +
+        `📊 Affected Metric: ${formatMetricName(context.metric)}\n\n` +
+        (snapshotLines ? `📋 Vehicle Snapshot:\n${snapshotLines}\n\n` : "") +
+        `🔄 Analyzing this issue for you...`;
+
+      const introId = "issue-intro";
+      setMessages([
+        {
+          id: introId,
+          sender: "ai",
+          text: introText,
+          timestamp: timeNow(),
+        },
+      ]);
+
+      // --- Step 2: Silently call the backend and append the full analysis ---
+      const runDiagnostic = async () => {
+        if (!context.initial_query) return;
+        setIsSending(true);
+        try {
+          const token = await getToken();
+          if (!token) throw new Error("Auth token missing");
+
+          const res = await fetch(`${BACKEND_URL}/vehicle/chat`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              message: context.initial_query,
+              latitude: location?.latitude,
+              longitude: location?.longitude,
+            }),
+          });
+
+          if (!res.ok) throw new Error("Agent failed");
+          const data = await res.json();
+
+          if (data.chat_id && !currentChatId) {
+            setCurrentChatId(data.chat_id);
+          }
+
+          let aiText = formatAIResponse(data);
+          if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+            aiText += "\n\n📍 Nearby workshops:\n" + data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n");
+          }
+
+          // Replace the "Analyzing..." intro with the real analysis
+          setMessages((prev) => [
+            // keep the intro but strip the "Analyzing..." suffix
+            { ...prev[0], text: prev[0].text.replace(/\n\n🔄 Analyzing this issue for you\.\.\./, "") },
+            {
+              id: data.chat_id ?? `issue-analysis-${Date.now()}`,
+              sender: "ai",
+              text: aiText,
+              timestamp: timeNow(),
+            },
+          ]);
+        } catch (err) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `issue-err-${Date.now()}`,
+              sender: "ai",
+              text: `⚠️ Could not fetch analysis: ${err.message}`,
+              timestamp: timeNow(),
+            },
+          ]);
+        } finally {
+          setIsSending(false);
         }
-      } catch (err) {
-        console.error("[Chat] Failed to parse issue_context:", err);
-      }
+      };
+
+      // Small delay so the intro bubble renders first
+      setTimeout(runDiagnostic, 600);
+    } catch (err) {
+      console.error("[Chat] Failed to parse issue_context:", err);
     }
   }, [params.issue_context]);
 
