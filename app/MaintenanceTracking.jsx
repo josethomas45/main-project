@@ -69,6 +69,7 @@ export default function MaintenanceTracking() {
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -112,6 +113,9 @@ export default function MaintenanceTracking() {
   };
 
   const handleAddReminder = async () => {
+    // Prevent duplicate submissions from rapid taps
+    if (isSubmitting) return;
+
     if (!newReminder.service_type) {
       Alert.alert("Error", "Select service type");
       return;
@@ -125,27 +129,15 @@ export default function MaintenanceTracking() {
       return;
     }
 
-    // Get vehicle ID — try context first, then fetch from backend
-    let vehicleId = currentVehicle?.id;
-    if (!vehicleId) {
-      console.log("handleAddReminder: currentVehicle is null, fetching from backend...");
-      const result = await checkCurrentVehicle();
-      vehicleId = result?.vehicle?.id;
-    }
-
+    // Use vehicle ID from context only — no slow network fallback here
+    const vehicleId = currentVehicle?.id;
     if (!vehicleId) {
       Alert.alert("Error", "No vehicle selected. Please go to Dashboard and ensure a vehicle is active.");
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      console.log("Creating maintenance with:", {
-        vehicle_id: vehicleId,
-        service_type: newReminder.service_type,
-        service_date: newReminder.service_date,
-        odometer_km: selectedRule?.requires_odometer ? Number(newReminder.odometer_km) : null,
-        notes: newReminder.notes || null,
-      });
       const newRecord = await createMaintenance(
         {
           vehicle_id: vehicleId,
@@ -187,6 +179,8 @@ export default function MaintenanceTracking() {
       );
     } catch {
       Alert.alert("Error", "Failed to add maintenance");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -203,6 +197,7 @@ export default function MaintenanceTracking() {
 
   const handleUpdateReminder = async () => {
     if (!editingReminder) return;
+    if (isSubmitting) return;
 
     if (
       selectedRule?.requires_odometer &&
@@ -212,6 +207,7 @@ export default function MaintenanceTracking() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await updateMaintenance(
         editingReminder.id,
@@ -239,6 +235,8 @@ export default function MaintenanceTracking() {
       Alert.alert("Success", "Maintenance updated");
     } catch {
       Alert.alert("Error", "Failed to update maintenance");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -537,18 +535,23 @@ export default function MaintenanceTracking() {
 
               {/* Save button */}
               <TouchableOpacity
-                style={styles.saveButton}
+                style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
                 onPress={editingReminder ? handleUpdateReminder : handleAddReminder}
                 activeOpacity={0.8}
+                disabled={isSubmitting}
               >
                 <LinearGradient
-                  colors={["#6366f1", "#8b5cf6"]}
+                  colors={isSubmitting ? ["#4b5563", "#374151"] : ["#6366f1", "#8b5cf6"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.saveGradient}
                 >
                   <Text style={styles.saveButtonText}>
-                    {editingReminder ? "Update Record" : "Save Reminder"}
+                    {isSubmitting
+                      ? "Saving..."
+                      : editingReminder
+                      ? "Update Record"
+                      : "Save Reminder"}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -938,6 +941,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   saveGradient: {
     paddingVertical: 18,
