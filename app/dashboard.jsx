@@ -210,6 +210,13 @@ export default function Dashboard() {
             colors: ["#6366f1", "#8b5cf6"],
         },
         {
+            id: "live-monitor",
+            title: "Live Monitor",
+            icon: "pulse",
+            route: "/car-live-monitoring",
+            colors: ["#0ea5e9", "#10b981"],
+        },
+        {
             id: "maintenance",
             title: "Maintenance",
             icon: "build",
