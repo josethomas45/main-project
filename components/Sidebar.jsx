@@ -32,6 +32,12 @@ export default function Sidebar({ visible, onClose, user, signOut, router, clear
       onPress: () => { router.push("dashboard"); onClose(); },
     },
     {
+      id: "live-monitoring",
+      icon: "pulse-outline",
+      label: "Live Monitoring",
+      onPress: () => { router.push("car-live-monitoring"); onClose(); },
+    },
+    {
       id: "maintenance",
       icon: "build-outline",
       label: "Maintenance Tracking",

@@ -76,6 +76,7 @@ function RootLayoutNav() {
       "home",
       "schedule",
       "cost-tracking",
+      "car-live-monitoring",
     ];
     const onProtectedPage = protectedRoutes.includes(segments[0]);
 
