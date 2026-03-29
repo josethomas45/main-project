@@ -415,130 +415,67 @@ export default function Dashboard() {
                             <Text style={{ color: "#94a3b8" }}>No vehicles found</Text>
                         </View>
                     ) : (
-                        <View style={{ gap: 12 }}>
-                            {vehicles.map((v) => {
-                                const isActive = currentVehicle?.id === v.id;
-                                const isSwitching = switchingId === v.id;
+                        <ScrollView
+                            style={styles.vehicleScrollList}
+                            nestedScrollEnabled
+                            showsVerticalScrollIndicator={false}
+                        >
+                            <View style={{ gap: 12 }}>
+                                {vehicles.map((v) => {
+                                    const isActive = currentVehicle?.id === v.id;
+                                    const isSwitching = switchingId === v.id;
 
-                                return (
-                                    <View
-                                        key={v.id}
-                                        style={{
-                                            flexDirection: "row",
-                                            alignItems: "center",
-                                            backgroundColor: isActive
-                                                ? "rgba(16, 185, 129, 0.1)"
-                                                : "rgba(30, 41, 59, 0.4)",
-                                            padding: 12,
-                                            borderRadius: 16,
-                                            borderWidth: 1,
-                                            borderColor: isActive
-                                                ? "rgba(16, 185, 129, 0.2)"
-                                                : "rgba(148, 163, 184, 0.1)",
-                                        }}
-                                    >
-                                        {/* Icon */}
+                                    return (
                                         <View
-                                            style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: 12,
-                                                backgroundColor: isActive
-                                                    ? "rgba(16, 185, 129, 0.2)"
-                                                    : "rgba(99, 102, 241, 0.1)",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                marginRight: 12,
-                                            }}
+                                            key={v.id}
+                                            style={[
+                                                styles.vehicleRow,
+                                                isActive && styles.vehicleRowActive,
+                                            ]}
                                         >
-                                            <Ionicons
-                                                name="car-sport"
-                                                size={20}
-                                                color={isActive ? "#10b981" : "#6366f1"}
-                                            />
-                                        </View>
-
-                                        {/* Info */}
-                                        <View style={{ flex: 1 }}>
-                                            <Text
-                                                style={{
-                                                    color: "#f1f5f9",
-                                                    fontSize: 15,
-                                                    fontWeight: "600",
-                                                }}
-                                            >
-                                                {v.year} {v.make} {v.model}
-                                            </Text>
-                                            <Text
-                                                style={{
-                                                    color: "#94a3b8",
-                                                    fontSize: 12,
-                                                }}
-                                            >
-                                                {v.vin}
-                                            </Text>
-                                        </View>
-
-                                        {/* Action */}
-                                        {isActive ? (
-                                            <View
-                                                style={{
-                                                    flexDirection: "row",
-                                                    alignItems: "center",
-                                                    backgroundColor: "rgba(16, 185, 129, 0.2)",
-                                                    paddingHorizontal: 10,
-                                                    paddingVertical: 4,
-                                                    borderRadius: 12,
-                                                    gap: 4,
-                                                }}
-                                            >
+                                            {/* Icon */}
+                                            <View style={[styles.vehicleIcon, isActive && styles.vehicleIconActive]}>
                                                 <Ionicons
-                                                    name="checkmark-circle"
-                                                    size={14}
-                                                    color="#10b981"
+                                                    name="car-sport"
+                                                    size={20}
+                                                    color={isActive ? "#10b981" : "#6366f1"}
                                                 />
-                                                <Text
-                                                    style={{
-                                                        color: "#10b981",
-                                                        fontSize: 12,
-                                                        fontWeight: "600",
-                                                    }}
-                                                >
-                                                    Active
+                                            </View>
+
+                                            {/* Info */}
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.vehicleRowName}>
+                                                    {v.year} {v.make} {v.model}
+                                                </Text>
+                                                <Text style={styles.vehicleRowVin}>
+                                                    {v.vin}
                                                 </Text>
                                             </View>
-                                        ) : (
-                                            <TouchableOpacity
-                                                onPress={() => handleSwitchVehicle(v.id)}
-                                                disabled={isSwitching || switchingId !== null}
-                                                style={{
-                                                    backgroundColor: "rgba(99, 102, 241, 0.1)",
-                                                    paddingHorizontal: 12,
-                                                    paddingVertical: 6,
-                                                    borderRadius: 12,
-                                                    borderWidth: 1,
-                                                    borderColor: "rgba(99, 102, 241, 0.2)",
-                                                }}
-                                            >
-                                                {isSwitching ? (
-                                                    <ActivityIndicator size="small" color="#6366f1" />
-                                                ) : (
-                                                    <Text
-                                                        style={{
-                                                            color: "#818cf8",
-                                                            fontSize: 12,
-                                                            fontWeight: "600",
-                                                        }}
-                                                    >
-                                                        Switch
-                                                    </Text>
-                                                )}
-                                            </TouchableOpacity>
-                                        )}
-                                    </View>
-                                );
-                            })}
-                        </View>
+
+                                            {/* Action */}
+                                            {isActive ? (
+                                                <View style={styles.activeBadge}>
+                                                    <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                                                    <Text style={styles.activeBadgeText}>Active</Text>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    onPress={() => handleSwitchVehicle(v.id)}
+                                                    disabled={isSwitching || switchingId !== null}
+                                                    style={styles.switchButton}
+                                                >
+                                                    {isSwitching ? (
+                                                        <ActivityIndicator size="small" color="#6366f1" />
+                                                    ) : (
+                                                        <Text style={styles.switchButtonText}>Switch</Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    );
+                                })}
+                            </View>
+                        </ScrollView>
                     )}
                 </Animated.View>
 
@@ -736,17 +673,82 @@ const styles = StyleSheet.create({
 
     // ── My Vehicles List ──
     vehicleListCard: {
-        backgroundColor: "rgba(30,41,59,0.75)", // Slightly darker/more opaque to differentiate
+        backgroundColor: "rgba(30,41,59,0.75)",
         borderRadius: 24,
         padding: 20,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: "rgba(99, 102, 241, 0.2)", // Different border color
+        borderColor: "rgba(99, 102, 241, 0.2)",
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
         shadowRadius: 16,
         elevation: 8,
+    },
+    vehicleScrollList: {
+        maxHeight: 340, // fits ~5 rows comfortably
+    },
+    vehicleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "rgba(30, 41, 59, 0.4)",
+        padding: 12,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: "rgba(148, 163, 184, 0.1)",
+    },
+    vehicleRowActive: {
+        backgroundColor: "rgba(16, 185, 129, 0.1)",
+        borderColor: "rgba(16, 185, 129, 0.2)",
+    },
+    vehicleIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: "rgba(99, 102, 241, 0.1)",
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 12,
+    },
+    vehicleIconActive: {
+        backgroundColor: "rgba(16, 185, 129, 0.2)",
+    },
+    vehicleRowName: {
+        color: "#f1f5f9",
+        fontSize: 15,
+        fontWeight: "600",
+    },
+    vehicleRowVin: {
+        color: "#94a3b8",
+        fontSize: 12,
+        marginTop: 2,
+    },
+    activeBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "rgba(16, 185, 129, 0.2)",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
+    activeBadgeText: {
+        color: "#10b981",
+        fontSize: 12,
+        fontWeight: "600",
+    },
+    switchButton: {
+        backgroundColor: "rgba(99, 102, 241, 0.1)",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "rgba(99, 102, 241, 0.2)",
+    },
+    switchButtonText: {
+        color: "#818cf8",
+        fontSize: 12,
+        fontWeight: "600",
     },
     cardHeader: {
         flexDirection: "row",
