@@ -9,7 +9,7 @@
  *   import OBDConnectionManager from '../utils/OBDConnectionManager';
  *   OBDConnectionManager.start(token, backendUrl);
  */
-import { startTelemetryLoop, stopTelemetryLoop } from './obdService';
+import { startTelemetryLoop, stopTelemetryLoop, registerBluetoothBridge } from './obdService';
 
 // ─── Singleton state ────────────────────────────────────────
 
@@ -70,6 +70,9 @@ function _connect() {
       _telemetryCleanup();
     }
     _telemetryCleanup = startTelemetryLoop(_ws);
+
+    // Register Bluetooth bridge to forward raw OBD data to backend
+    registerBluetoothBridge(_ws);
   };
 
   _ws.onmessage = (event) => {

@@ -24,7 +24,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
 import OBDConnectionManager from "../utils/OBDConnectionManager";
-import { readDTCs } from "../utils/obdService";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -105,7 +104,7 @@ export default function OBDIssues() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const { currentVehicle, clearVehicle } = useVehicle();
   
-  // Demo Mode Conversion Modal
+  // Issue Detail Modal
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [showConversationModal, setShowConversationModal] = useState(false);
   
@@ -181,14 +180,6 @@ export default function OBDIssues() {
     try {
       setLoading(true);
       
-      // FOR DEMO MODE: Use mock readDTCs from obdService.js
-      // This bypasses the backend for the main/demo branch
-      console.log("[OBDIssues] Fetching mock incidents for demo...");
-      const mockData = await readDTCs();
-      setIncidents(mockData);
-
-      /* 
-      // Original actual-obd logic:
       const token = await getToken();
       const res = await fetch(`${BACKEND_URL}/incidents/history`, {
         headers: { 
@@ -198,7 +189,6 @@ export default function OBDIssues() {
       if (!res.ok) throw new Error('Failed to fetch incidents');
       const data = await res.json();
       setIncidents(data);
-      */
     } catch (err) {
       console.error("Fetch incidents error:", err);
       setIncidents([]);

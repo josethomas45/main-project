@@ -19,7 +19,7 @@ import Animated, {
 import { useAuth } from '@clerk/clerk-expo';
 import { useVehicle } from '../contexts/VehicleContext';
 import { detectVehicleInfo } from '../utils/obdService';
-// import BluetoothService from '../utils/BluetoothService';
+import BluetoothService from '../utils/BluetoothService';
 import OBDConnectionManager from '../utils/OBDConnectionManager';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -68,61 +68,130 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   }, [visible]);
 
   /**
-   * Simulated loadDevices for demo mode.
+   * Scan for real Bluetooth OBD devices.
+   * First lists already-paired devices, then runs discovery for new ones.
    */
   const loadDevices = async () => {
     if (loadingRef.current) return;
     loadingRef.current = true;
 
     setFlowState('scanning');
-    setStatusMessage('Searching for OBD Link...');
+    setStatusMessage('Searching for OBD Devices...');
     setIsScanning(true);
     setDevices([]);
 
     try {
-      // Simulate scanning delay
-      await new Promise(r => setTimeout(r, 1500));
+      // Request Bluetooth permissions
+      const hasPermission = await BluetoothService.requestPermissions();
+      if (!hasPermission) {
+        setFlowState('error');
+        setErrorMessage('Bluetooth permissions are required to connect to your OBD adapter.');
+        setIsScanning(false);
+        loadingRef.current = false;
+        return;
+      }
+
+      // Check Bluetooth is enabled
+      const btEnabled = await BluetoothService.isBluetoothEnabled();
+      if (!btEnabled) {
+        setFlowState('error');
+        setErrorMessage('Please turn on Bluetooth to scan for OBD devices.');
+        setIsScanning(false);
+        loadingRef.current = false;
+        return;
+      }
+
+      // Get already-paired devices first (instant)
+      const paired = await BluetoothService.getPairedDevices();
+      const obdDevices = paired.filter(d => {
+        const name = (d.name || '').toLowerCase();
+        // Common ELM327/OBD adapter names
+        return name.includes('obd') || name.includes('elm') || name.includes('vlink') ||
+               name.includes('obdii') || name.includes('scan') || name.includes('auto');
+      });
+
+      if (obdDevices.length > 0) {
+        // Show paired OBD devices immediately
+        setDevices(obdDevices);
+        setStatusMessage(`Found ${obdDevices.length} paired device(s)`);
+      }
+
+      // Also run discovery for unpaired devices
+      setStatusMessage(obdDevices.length > 0 ? 'Scanning for more devices...' : 'Scanning for devices...');
       
-      // Found a virtual demo device
-      setDevices([{
-        name: 'AutoVitals Demo Link',
-        address: 'DEMO-OBD-V3',
-        id: 'demo-link'
-      }]);
-      
+      const allFound = [...obdDevices];
+      const discovered = await BluetoothService.startDiscovery((device) => {
+        // Add newly discovered devices that aren't already in the list
+        if (device && !allFound.find(d => d.address === device.address)) {
+          allFound.push(device);
+          setDevices([...allFound]);
+        }
+      });
+
+      // Merge any remaining discovered devices
+      if (discovered && discovered.length > 0) {
+        for (const d of discovered) {
+          if (!allFound.find(existing => existing.address === d.address)) {
+            allFound.push(d);
+          }
+        }
+        setDevices([...allFound]);
+      }
+
+      if (allFound.length === 0) {
+        setStatusMessage('No OBD devices found');
+      } else {
+        setStatusMessage(`Found ${allFound.length} device(s)`);
+      }
+
       setIsScanning(false);
       loadingRef.current = false;
     } catch (err) {
+      console.error('[VehicleCheck] Device scan error:', err);
       setIsScanning(false);
       loadingRef.current = false;
       setFlowState('error');
-      setErrorMessage('Search failed');
+      setErrorMessage(err.message || 'Failed to scan for Bluetooth devices');
     }
   };
 
 
 
   /**
-   * Simulated connection for demo mode.
+   * Connect to a real Bluetooth OBD device and initialize ELM327.
    */
   const connectToDevice = async (device) => {
     setFlowState('connecting');
-    setStatusMessage(`Connecting to Demo Link...`);
+    setStatusMessage(`Connecting to ${device.name || 'OBD Device'}...`);
     setIsScanning(false);
 
     try {
-      // Simulate handshake delay
-      await new Promise(r => setTimeout(r, 2000));
-      setStatusMessage('Initializing Demo Protocol...');
-      await new Promise(r => setTimeout(r, 1000));
-      setStatusMessage('Demo Connection Secured');
-      await new Promise(r => setTimeout(r, 1000));
+      // Stop any ongoing discovery
+      await BluetoothService.stopDiscovery();
 
-      // Successfully connected (virtually)
+      // Connect via Bluetooth Classic (RFCOMM/SPP)
+      await BluetoothService.connect(device);
+      setStatusMessage('Initializing OBD Protocol...');
+
+      // Initialize ELM327 (ATE0, ATSP0)
+      await BluetoothService.initializeOBD();
+      setStatusMessage('Connection Secured');
+
+      // Short pause to let the UI show the success state
+      await new Promise(r => setTimeout(r, 500));
+
+      // Proceed to VIN detection
       await detectVIN();
     } catch (err) {
+      console.error('[VehicleCheck] Connection error:', err);
       setFlowState('error');
-      setErrorMessage('Connection timed out');
+      setErrorMessage(
+        err.message?.includes('not enabled')
+          ? 'Please turn on Bluetooth and try again.'
+          : err.message?.includes('permissions')
+          ? 'Bluetooth permissions are required.'
+          : `Connection failed: ${err.message || 'Device not responding'}`
+      );
     }
   };
 
