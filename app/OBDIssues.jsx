@@ -24,6 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
 import OBDConnectionManager from "../utils/OBDConnectionManager";
+import { readDTCs } from "../utils/obdService";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -104,6 +105,10 @@ export default function OBDIssues() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const { currentVehicle, clearVehicle } = useVehicle();
   
+  // Demo Mode Conversion Modal
+  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [showConversationModal, setShowConversationModal] = useState(false);
+  
   // WebSocket state (driven by OBDConnectionManager)
   const [wsConnected, setWsConnected] = useState(OBDConnectionManager.isConnected());
 
@@ -175,22 +180,27 @@ export default function OBDIssues() {
   const fetchIncidents = async () => {
     try {
       setLoading(true);
-      const token = await getToken();
       
+      // FOR DEMO MODE: Use mock readDTCs from obdService.js
+      // This bypasses the backend for the main/demo branch
+      console.log("[OBDIssues] Fetching mock incidents for demo...");
+      const mockData = await readDTCs();
+      setIncidents(mockData);
+
+      /* 
+      // Original actual-obd logic:
+      const token = await getToken();
       const res = await fetch(`${BACKEND_URL}/incidents/history`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
         },
       });
-      
       if (!res.ok) throw new Error('Failed to fetch incidents');
-      
       const data = await res.json();
       setIncidents(data);
+      */
     } catch (err) {
       console.error("Fetch incidents error:", err);
-      Alert.alert("Error", "Failed to load incidents");
-      // Set empty array on error so empty state shows
       setIncidents([]);
     } finally {
       setLoading(false);
@@ -216,37 +226,38 @@ export default function OBDIssues() {
   /* ============================
      HANDLE INCIDENT PRESS
   ============================ */
-  const handleIncidentPress = async (incident) => {
-    try {
-      const token = await getToken();
-      
-      const res = await fetch(`${BACKEND_URL}/incidents/${incident.id}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (!res.ok) throw new Error('Failed to fetch incident details');
-      
-      const data = await res.json();
-      
-      // Display incident details in alert for now
-      // TODO: Create detail view page with full diagnostic data and chat
-      Alert.alert(
-        "Incident Details",
-        `ID: ${data.id}\nMetric: ${formatMetricName(data.trigger_metric)}\nValue: ${data.trigger_value} / ${data.trigger_limit}\nSeverity: ${data.severity}\nStatus: ${data.status}\n\n${data.message}`,
-        [
-          { text: "Close", style: "cancel" },
-          data.status === "open" && {
-            text: "Mark Resolved",
-            onPress: () => updateIncidentStatus(data.id, "resolved"),
-          },
-        ].filter(Boolean)
-      );
-    } catch (err) {
-      console.error("Fetch incident error:", err);
-      Alert.alert("Error", "Failed to load incident details");
-    }
+  const handleIncidentPress = (incident) => {
+    setSelectedIssue(incident);
+    setShowConversationModal(true);
+  };
+
+  const handleStartConversation = () => {
+    if (!selectedIssue) return;
+    
+    setShowConversationModal(false);
+    
+    // Prepare context for the chat
+    // Snapshot values + metric + message
+    const snapshotStr = Object.entries(selectedIssue.snapshot || {})
+      .map(([k, v]) => `${formatMetricName(k)}: ${v}`)
+      .join(', ');
+
+    const context = {
+      trigger: 'issue_diagnostic',
+      issue_id: selectedIssue.id,
+      code: selectedIssue.code,
+      metric: selectedIssue.metric,
+      message: selectedIssue.message,
+      snapshot: selectedIssue.snapshot,
+      initial_query: `I'm seeing a "${selectedIssue.message}" issue (Code ${selectedIssue.code}). Here is my vehicle state: ${snapshotStr}. Can you analyze this?`
+    };
+
+    router.push({
+      pathname: '/chat',
+      params: { 
+        issue_context: JSON.stringify(context)
+      }
+    });
   };
 
   /* ============================
@@ -518,6 +529,84 @@ export default function OBDIssues() {
               <Ionicons name="log-out-outline" size={22} color="#ef4444" />
               <Text style={styles.logoutText}>Sign Out</Text>
             </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Conversation Confirmation Modal */}
+      <Modal
+        visible={showConversationModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConversationModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={styles.backdropTouchable}
+            activeOpacity={1}
+            onPress={() => setShowConversationModal(false)}
+          />
+
+          <Animated.View
+            entering={FadeInUp.duration(500).springify()}
+            style={styles.issueSheet}
+          >
+            <View style={styles.sheetHandle} />
+            
+            <View style={styles.issueSheetHeader}>
+              <LinearGradient
+                colors={getSeverityGradient(selectedIssue?.severity)}
+                style={styles.issueIconCircle}
+              >
+                <Ionicons 
+                  name={getIssueIcon(selectedIssue?.metric)} 
+                  size={32} 
+                  color="#fff" 
+                />
+              </LinearGradient>
+              <Text style={styles.issueTitle}>{selectedIssue?.message}</Text>
+              <Text style={styles.issueCode}>Error Code: {selectedIssue?.code}</Text>
+            </View>
+
+            <View style={styles.snapshotBox}>
+              <Text style={styles.snapshotTitle}>Live Data Snapshot</Text>
+              <View style={styles.snapshotGrid}>
+                {selectedIssue && Object.entries(selectedIssue.snapshot || {}).map(([key, value]) => (
+                  <View key={key} style={styles.snapshotItem}>
+                    <Text style={styles.snapshotLabel}>{formatMetricName(key)}</Text>
+                    <Text style={styles.snapshotValue}>{value}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.questionBox}>
+              <Text style={styles.questionText}>Do you want to converse with agent regarding this?</Text>
+            </View>
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={() => setShowConversationModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Maybe Later</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.confirmButton} 
+                onPress={handleStartConversation}
+              >
+                <LinearGradient
+                  colors={["#6366f1", "#8b5cf6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.confirmGradient}
+                >
+                  <Text style={styles.confirmButtonText}>Start Consultation</Text>
+                  <Ionicons name="chatbubbles" size={18} color="#fff" style={{ marginLeft: 8 }} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         </View>
       </Modal>
@@ -865,5 +954,141 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 12,
+  },
+
+  // ── Issue Sheet ──
+  issueSheet: {
+    backgroundColor: "#1e293b",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  issueSheetHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  issueIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  issueTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#f1f5f9",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  issueCode: {
+    fontSize: 14,
+    color: "#94a3b8",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  snapshotBox: {
+    backgroundColor: "rgba(15,23,42,0.4)",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.1)",
+  },
+  snapshotTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#6366f1",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 16,
+  },
+  snapshotGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  snapshotItem: {
+    width: "48%",
+    marginBottom: 14,
+  },
+  snapshotLabel: {
+    fontSize: 11,
+    color: "#64748b",
+    marginBottom: 2,
+    fontWeight: "600",
+  },
+  snapshotValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#f1f5f9",
+  },
+  questionBox: {
+    marginBottom: 30,
+    paddingHorizontal: 10,
+  },
+  questionText: {
+    fontSize: 17,
+    color: "#f1f5f9",
+    textAlign: "center",
+    lineHeight: 26,
+    fontWeight: "500",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: "rgba(148,163,184,0.08)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  cancelButtonText: {
+    color: "#94a3b8",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  confirmButton: {
+    flex: 1.8,
+    height: 58,
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  confirmGradient: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  confirmButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
   },
 });

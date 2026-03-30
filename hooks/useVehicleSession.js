@@ -83,11 +83,15 @@ export const useVehicleSession = () => {
         error: formatErrorMessage(errorData, 'Failed to check vehicle session') 
       };
     } catch (err) {
-      console.error('❌ Network error:', err);
+      console.error('❌ Network error in checkCurrentVehicle:', {
+        message: err.message,
+        stack: err.stack,
+        url: `${BACKEND_URL}/vehicle/current`
+      });
       return { 
         exists: false, 
         vehicle: null, 
-        error: 'Network error. Please check your connection.' 
+        error: `Network error: ${err.message}. Please check your connection and BACKEND_URL.` 
       };
     }
   };
@@ -152,12 +156,17 @@ export const useVehicleSession = () => {
         error: formatErrorMessage(errorData, 'Failed to identify vehicle') 
       };
     } catch (err) {
-      console.error('Identify vehicle error:', err);
+      console.error('❌ Identify vehicle error:', {
+        message: err.message,
+        stack: err.stack,
+        url: `${BACKEND_URL}/vehicle/identify`,
+        vin
+      });
       return { 
         success: false, 
         vehicle: null, 
         isNew: false, 
-        error: 'Network error. Please check your connection.' 
+        error: `Registration error: ${err.message}. If Railway logs show 403, this vehicle may be registered to another account or there's a CORS issue.`
       };
     }
   };
@@ -197,11 +206,15 @@ export const useVehicleSession = () => {
         error: formatErrorMessage(errorData, 'Failed to fetch vehicles') 
       };
     } catch (err) {
-      console.error('List vehicles error:', err);
+      console.error('❌ List vehicles error:', {
+        message: err.message,
+        stack: err.stack,
+        url: `${BACKEND_URL}/vehicle/list`
+      });
       return { 
         success: false, 
         vehicles: [], 
-        error: 'Network error. Please check your connection.' 
+        error: `Network error: ${err.message}. Please check your connection.` 
       };
     }
   };
@@ -252,11 +265,16 @@ export const useVehicleSession = () => {
         error: formatErrorMessage(errorData, 'Failed to switch vehicle') 
       };
     } catch (err) {
-      console.error('Switch vehicle error:', err);
+      console.error('❌ Switch vehicle error:', {
+        message: err.message,
+        stack: err.stack,
+        url: `${BACKEND_URL}/vehicle/switch`,
+        vehicleId
+      });
       return { 
         success: false, 
         vehicleId: null, 
-        error: 'Network error. Please check your connection.' 
+        error: `Network error: ${err.message}. Please check your connection.` 
       };
     }
   };

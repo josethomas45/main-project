@@ -11,6 +11,20 @@
     "preview": {
       "distribution": "internal"
     },
+    "demo": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bWF4aW11bS1uZXd0LTQ5LmNsZXJrLmFjY291bnRzLmRldiQ",
+        "EXPO_PUBLIC_BACKEND_URL": "https://finalproject-production-fcdc.up.railway.app"
+      }
+    },
+    "actual": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bWF4aW11bS1uZXd0LTQ5LmNsZXJrLmFjY291bnRzLmRldiQ",
+        "EXPO_PUBLIC_BACKEND_URL": "https://finalproject-production-fcdc.up.railway.app"
+      }
+    },
     "production": {
       "autoIncrement": true
     }

@@ -19,7 +19,7 @@ import Animated, {
 import { useAuth } from '@clerk/clerk-expo';
 import { useVehicle } from '../contexts/VehicleContext';
 import { detectVehicleInfo } from '../utils/obdService';
-import BluetoothService from '../utils/BluetoothService';
+// import BluetoothService from '../utils/BluetoothService';
 import OBDConnectionManager from '../utils/OBDConnectionManager';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -68,110 +68,61 @@ export default function VehicleCheckModal({ visible, onComplete }) {
   }, [visible]);
 
   /**
-   * Load paired devices first, then start discovery for new ones.
-   * Discovery runs in the background so paired devices appear instantly.
+   * Simulated loadDevices for demo mode.
    */
   const loadDevices = async () => {
-    if (loadingRef.current) return; // Prevent duplicate calls
+    if (loadingRef.current) return;
     loadingRef.current = true;
 
     setFlowState('scanning');
-    setStatusMessage('Looking for OBD Devices...');
-    setErrorMessage(null);
+    setStatusMessage('Searching for OBD Link...');
     setIsScanning(true);
     setDevices([]);
 
     try {
-      // 1) Check if Bluetooth is on
-      const btEnabled = await BluetoothService.isBluetoothEnabled();
-      if (!btEnabled) {
-        setFlowState('error');
-        setErrorMessage('Bluetooth is turned off');
-        setStatusMessage('Please enable Bluetooth to continue');
-        setIsScanning(false);
-        return;
-      }
-
-      // 2) Request permissions
-      const hasPermission = await BluetoothService.requestPermissions();
-      if (!hasPermission) {
-        setFlowState('error');
-        setErrorMessage('Bluetooth permissions not granted');
-        setStatusMessage('Please grant Bluetooth permissions');
-        setIsScanning(false);
-        return;
-      }
-
-      // 3) Show already-paired devices (ELM327 usually appears here)
-      const paired = await BluetoothService.getPairedDevices();
-      if (paired.length > 0) {
-        setDevices(paired);
-      }
-
-      // 4) Fire discovery in the BACKGROUND — do NOT await
-      //    startDiscovery() blocks for ~12s until complete
-      BluetoothService.startDiscovery((device) => {
-        setDevices(prev => {
-          const addr = device.address || device.id;
-          if (prev.find(d => (d.address || d.id) === addr)) return prev;
-          return [...prev, device];
-        });
-      }).then(() => {
-        setIsScanning(false);
-        loadingRef.current = false;
-      }).catch((err) => {
-        console.warn('Discovery error (non-critical):', err);
-        setIsScanning(false);
-        loadingRef.current = false;
-      });
-
+      // Simulate scanning delay
+      await new Promise(r => setTimeout(r, 1500));
+      
+      // Found a virtual demo device
+      setDevices([{
+        name: 'AutoVitals Demo Link',
+        address: 'DEMO-OBD-V3',
+        id: 'demo-link'
+      }]);
+      
+      setIsScanning(false);
+      loadingRef.current = false;
     } catch (err) {
-      console.error('Device scan error:', err);
       setIsScanning(false);
       loadingRef.current = false;
       setFlowState('error');
-      setErrorMessage(err.message || 'Failed to scan for Bluetooth devices');
-      setStatusMessage('Please try again');
+      setErrorMessage('Search failed');
     }
   };
 
 
 
   /**
-   * Connect to a specific device
+   * Simulated connection for demo mode.
    */
   const connectToDevice = async (device) => {
     setFlowState('connecting');
-    setStatusMessage(`Connecting to ${device.name || 'device'}...`);
+    setStatusMessage(`Connecting to Demo Link...`);
     setIsScanning(false);
-    await BluetoothService.stopDiscovery();
 
     try {
-      // Step 1: Bluetooth connect
-      await BluetoothService.connect(device);
-      setStatusMessage('Initializing OBD sensor...');
-
-      // Step 2: Initialize ELM327 (ATZ, ATE0, etc.)
-      await BluetoothService.initializeOBD();
-
-      // Wait for ELM327 to settle after init
-      setStatusMessage('Preparing to read vehicle info...');
+      // Simulate handshake delay
       await new Promise(r => setTimeout(r, 2000));
+      setStatusMessage('Initializing Demo Protocol...');
+      await new Promise(r => setTimeout(r, 1000));
+      setStatusMessage('Demo Connection Secured');
+      await new Promise(r => setTimeout(r, 1000));
 
-      // Verify connection is still alive
-      const stillConn = await BluetoothService.isConnected();
-      if (!stillConn) {
-        throw new Error('Connection dropped after OBD initialization');
-      }
-      setStatusMessage('Reading vehicle info...');
-      
-      // Step 3: Detect VIN automatically
+      // Successfully connected (virtually)
       await detectVIN();
     } catch (err) {
-      console.error('Connection error:', err);
       setFlowState('error');
-      setErrorMessage(`Failed to connect: ${err.message || 'Unknown error'}`);
-      setStatusMessage('Connection failed');
+      setErrorMessage('Connection timed out');
     }
   };
 
