@@ -127,7 +127,7 @@ function MetricItem({ icon, label, value, unit, color, bgColor, barPct }) {
   useEffect(() => {
     Animated.timing(barAnim, {
       toValue: barPct,
-      duration: 500,
+      duration: 300,
       useNativeDriver: false,
     }).start();
   }, [barPct]);
@@ -321,27 +321,20 @@ export default function CarLiveMonitoring() {
   const [elapsed, setElapsed] = useState(0);
 
   const intervalRef = useRef(null);
-  const elapsedRef = useRef(null);
+  const elapsedRef = useRef(0);
 
-  // Live data simulation
   useEffect(() => {
-    if (isLive) {
-      intervalRef.current = setInterval(() => {
-        setMetrics((prev) => generateMetrics(prev));
-      }, 1500);
-    } else {
+    if (!isLive) {
       clearInterval(intervalRef.current);
+      return;
     }
+    intervalRef.current = setInterval(() => {
+      setMetrics((prev) => generateMetrics(prev));
+      elapsedRef.current += 2;
+      setElapsed(elapsedRef.current);
+    }, 2500);
     return () => clearInterval(intervalRef.current);
   }, [isLive]);
-
-  // Session timer
-  useEffect(() => {
-    elapsedRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(elapsedRef.current);
-  }, []);
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -447,31 +440,21 @@ export default function CarLiveMonitoring() {
           </LinearGradient>
         </View>
 
-        {/* ── Speed + RPM Gauges ── */}
+        {/* ── Speed & RPM ── */}
         <View style={styles.card}>
           <SectionTitle icon="speedometer-outline" title="Speed & RPM" />
           <View style={{ flexDirection: "row", justifyContent: "space-around", paddingTop: 8 }}>
-            <ArcGauge
-              value={metrics.speed}
-              max={220}
-              label="Speed"
-              unit="km/h"
-              colors={["#6366f1", "#8b5cf6"]}
-            />
-            <ArcGauge
-              value={metrics.rpm}
-              max={7000}
-              label="Engine RPM"
-              unit="RPM"
-              colors={["#8b5cf6", "#d946ef"]}
-            />
-            <ArcGauge
-              value={metrics.throttle}
-              max={100}
-              label="Throttle"
-              unit="%"
-              colors={["#f59e0b", "#ef4444"]}
-            />
+            <View style={styles.bigMetric}>
+              <Text style={styles.bigMetricValue}>{Math.round(metrics.speed)}</Text>
+              <Text style={styles.bigMetricUnit}>km/h</Text>
+              <Text style={styles.bigMetricLabel}>Speed</Text>
+            </View>
+            <View style={styles.bigMetricDivider} />
+            <View style={styles.bigMetric}>
+              <Text style={styles.bigMetricValue}>{Math.round(metrics.rpm)}</Text>
+              <Text style={styles.bigMetricUnit}>RPM</Text>
+              <Text style={styles.bigMetricLabel}>Engine RPM</Text>
+            </View>
           </View>
         </View>
 
@@ -516,37 +499,6 @@ export default function CarLiveMonitoring() {
           />
         </View>
 
-        {/* ── Tire Pressure ── */}
-        <View style={styles.card}>
-          <SectionTitle icon="ellipse-outline" title="Tire Pressure" />
-          <TireMap
-            tireFL={metrics.tireFL}
-            tireFR={metrics.tireFR}
-            tireRL={metrics.tireRL}
-            tireRR={metrics.tireRR}
-          />
-          <View style={{ flexDirection: "row", justifyContent: "center", flexWrap: "wrap", marginTop: 12 }}>
-            {[
-              { label: "Front Left",  v: metrics.tireFL },
-              { label: "Front Right", v: metrics.tireFR },
-              { label: "Rear Left",   v: metrics.tireRL },
-              { label: "Rear Right",  v: metrics.tireRR },
-            ].map(({ label, v }) => (
-              <View key={label} style={styles.tirePill}>
-                <Text style={styles.tirePillLabel}>{label}</Text>
-                <Text
-                  style={[
-                    styles.tirePillValue,
-                    { color: v < 30 ? "#ef4444" : v < 32 ? "#f59e0b" : "#10b981" },
-                  ]}
-                >
-                  {v.toFixed(0)} PSI
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
         {/* ── System Status ── */}
         <View style={styles.card}>
           <SectionTitle icon="shield-checkmark-outline" title="System Status" />
@@ -560,36 +512,6 @@ export default function CarLiveMonitoring() {
             <StatusPill label="Traction Ctrl" ok={true} />
             <StatusPill label="Check Engine"  ok={true} />
           </View>
-        </View>
-
-        {/* ── GPS ── */}
-        <View style={styles.card}>
-          <SectionTitle icon="navigate-outline" title="GPS Location" />
-          <View style={styles.gpsRow}>
-            <View style={styles.gpsField}>
-              <Text style={styles.gpsLabel}>Latitude</Text>
-              <Text style={styles.gpsValue}>{metrics.latitude.toFixed(5)}°</Text>
-            </View>
-            <View style={[styles.gpsField, { borderLeftWidth: 1, borderLeftColor: "rgba(148,163,184,0.1)" }]}>
-              <Text style={styles.gpsLabel}>Longitude</Text>
-              <Text style={styles.gpsValue}>{metrics.longitude.toFixed(5)}°</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.gpsButton}
-            activeOpacity={0.8}
-            onPress={() => {}}
-          >
-            <LinearGradient
-              colors={["#6366f1", "#8b5cf6"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gpsButtonInner}
-            >
-              <Ionicons name="map-outline" size={16} color="#fff" />
-              <Text style={styles.gpsButtonText}>Open in Maps</Text>
-            </LinearGradient>
-          </TouchableOpacity>
         </View>
 
         <View style={{ height: 40 }} />
@@ -708,42 +630,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Tire pills
-  tirePill: {
-    backgroundColor: "rgba(30,41,59,0.8)",
-    borderRadius: 12,
-    padding: 10,
-    margin: 4,
+  // Big metric (Speed / RPM plain numbers)
+  bigMetric: {
     alignItems: "center",
-    width: (SCREEN_WIDTH - 36 - 40 - 24) / 2,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.1)",
+    flex: 1,
   },
-  tirePillLabel: { fontSize: 11, color: "#64748b", fontWeight: "600" },
-  tirePillValue: { fontSize: 15, fontWeight: "800", marginTop: 4 },
-
-  // GPS
-  gpsRow: {
-    flexDirection: "row",
-    marginBottom: 14,
+  bigMetricValue: {
+    fontSize: 36,
+    fontWeight: "800",
+    color: "#f1f5f9",
+    letterSpacing: -1,
   },
-  gpsField: { flex: 1, paddingHorizontal: 8, alignItems: "center" },
-  gpsLabel: { fontSize: 12, color: "#64748b", fontWeight: "600", marginBottom: 4 },
-  gpsValue: { fontSize: 15, fontWeight: "700", color: "#a5b4fc" },
-  gpsButton: {
-    borderRadius: 14,
-    overflow: "hidden",
+  bigMetricUnit: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#94a3b8",
+    marginTop: 2,
   },
-  gpsButtonInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
+  bigMetricLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+    marginTop: 6,
   },
-  gpsButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#fff",
+  bigMetricDivider: {
+    width: 1,
+    backgroundColor: "rgba(148,163,184,0.15)",
+    marginVertical: 4,
   },
 });

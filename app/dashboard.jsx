@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { InteractionManager } from "react-native";
 import {
     ActivityIndicator,
     Alert,
@@ -18,9 +19,6 @@ import Animated, {
     FadeInDown,
     FadeInUp,
     ZoomIn,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
 } from "react-native-reanimated";
 import { useVehicle } from "../contexts/VehicleContext";
 
@@ -54,18 +52,13 @@ export default function Dashboard() {
     const [switchingId, setSwitchingId] = useState(null);
 
     useEffect(() => {
-        console.log("DASHBOARD: Mounted");
         loadVehicles();
-        return () => console.log("DASHBOARD: Unmounted");
     }, []);
 
     const loadVehicles = async () => {
-        console.log("DASHBOARD: Loading vehicles...");
         try {
             const res = await listVehicles();
-            if (res.success) {
-                setVehicles(res.vehicles);
-            }
+            if (res.success) setVehicles(res.vehicles);
         } catch (error) {
             console.error("Failed to load vehicles:", error);
         } finally {
@@ -101,19 +94,22 @@ export default function Dashboard() {
     const [recentActivity, setRecentActivity] = useState([]);
     const [activityLoading, setActivityLoading] = useState(true);
     const activityFetchInProgress = useRef(false);
+    const lastFetchedVehicleId = useRef(undefined);
 
     useEffect(() => {
-        const loadActivity = async () => {
-            if (activityFetchInProgress.current) return;
-            activityFetchInProgress.current = true;
-            console.log("DASHBOARD: Loading activity sources...");
-            setActivityLoading(true);
+        const vehicleId = currentVehicle?.id;
+        if (lastFetchedVehicleId.current === vehicleId) return;
+        lastFetchedVehicleId.current = vehicleId;
 
+        if (activityFetchInProgress.current) return;
+        activityFetchInProgress.current = true;
+        setActivityLoading(true);
+
+        const task = InteractionManager.runAfterInteractions(async () => {
             try {
                 const token = await getToken();
                 const headers = { Authorization: `Bearer ${token}` };
 
-                // Fetch all 3 sources in parallel, fail gracefully
                 const [chatsRes, incidentsRes, maintenanceRes] = await Promise.allSettled([
                     fetch(`${BACKEND_URL}/chat/history`, { headers }),
                     fetch(`${BACKEND_URL}/incidents/history`, { headers }),
@@ -168,37 +164,22 @@ export default function Dashboard() {
                     }));
                 }
 
-                // Sort newest first, keep top 3
                 items.sort((a, b) => new Date(b.date) - new Date(a.date));
                 setRecentActivity(items.slice(0, 3));
             } catch (err) {
                 console.error("DASHBOARD: Activity load error:", err);
             } finally {
-                console.log("DASHBOARD: Activity load completed");
                 setActivityLoading(false);
                 activityFetchInProgress.current = false;
             }
-        };
+        });
 
-        loadActivity();
+        return () => {
+            task.cancel();
+            activityFetchInProgress.current = false;
+        };
     }, [currentVehicle?.id]);
 
-    // Press animation helper
-    const createPressAnimation = () => {
-        const scale = useSharedValue(1);
-        const animatedStyle = useAnimatedStyle(() => ({
-            transform: [{ scale: scale.value }],
-        }));
-
-        const onPressIn = () => {
-            scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
-        };
-        const onPressOut = () => {
-            scale.value = withSpring(1, { damping: 15, stiffness: 400 });
-        };
-
-        return { animatedStyle, onPressIn, onPressOut };
-    };
 
     // Quick actions data
     const quickActions = [
@@ -249,6 +230,7 @@ export default function Dashboard() {
             <LinearGradient
                 colors={["#1e293b", "#0f172a", "#0f172a"]}
                 style={styles.backgroundGradient}
+                pointerEvents="none"
             />
 
             {/* Popup Menu Modal */}
@@ -356,41 +338,35 @@ export default function Dashboard() {
                     </Animated.View>
 
                     <View style={styles.actionsGrid}>
-                        {quickActions.map((action, index) => {
-                            const { animatedStyle, onPressIn, onPressOut } = createPressAnimation();
-
-                            return (
-                                <Animated.View
-                                    key={action.id}
-                                    entering={FadeInUp.duration(700).delay(300 + index * 80)}
-                                    style={[styles.actionCardWrapper, animatedStyle]}
+                        {quickActions.map((action, index) => (
+                            <Animated.View
+                                key={action.id}
+                                entering={FadeInUp.duration(700).delay(300 + index * 80)}
+                                style={styles.actionCardWrapper}
+                            >
+                                <TouchableOpacity
+                                    activeOpacity={0.75}
+                                    onPress={() => router.push(action.route)}
                                 >
-                                    <TouchableOpacity
-                                        activeOpacity={0.7}
-                                        onPressIn={onPressIn}
-                                        onPressOut={onPressOut}
-                                        onPress={() => router.push(action.route)}
-                                    >
-                                        <View style={styles.actionCard}>
-                                            <LinearGradient
-                                                colors={action.colors}
-                                                start={{ x: 0, y: 0 }}
-                                                end={{ x: 1, y: 1 }}
-                                                style={styles.actionIconContainer}
-                                            >
-                                                <Ionicons name={action.icon} size={26} color="#ffffff" />
-                                            </LinearGradient>
+                                    <View style={styles.actionCard}>
+                                        <LinearGradient
+                                            colors={action.colors}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={styles.actionIconContainer}
+                                        >
+                                            <Ionicons name={action.icon} size={26} color="#ffffff" />
+                                        </LinearGradient>
 
-                                            <Text style={styles.actionTitle}>{action.title}</Text>
+                                        <Text style={styles.actionTitle}>{action.title}</Text>
 
-                                            <View style={styles.actionArrow}>
-                                                <Ionicons name="arrow-forward" size={16} color="#64748b" />
-                                            </View>
+                                        <View style={styles.actionArrow}>
+                                            <Ionicons name="arrow-forward" size={16} color="#64748b" />
                                         </View>
-                                    </TouchableOpacity>
-                                </Animated.View>
-                            );
-                        })}
+                                    </View>
+                                </TouchableOpacity>
+                            </Animated.View>
+                        ))}
                     </View>
                 </View>
 

@@ -301,45 +301,13 @@ export default function OBDIssues() {
           activeOpacity={0.7}
           onPress={() => handleIncidentPress(item)}
         >
-          <View
-            style={[
-              styles.incidentCard,
-              { borderLeftColor: getSeverityColor(item.severity) },
-            ]}
-          >
-            {/* Icon with gradient */}
-            <LinearGradient
-              colors={getSeverityGradient(item.severity)}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.iconContainer}
-            >
-              <Ionicons
-                name={getIssueIcon(item.trigger_metric)}
-                size={24}
-                color="#ffffff"
-              />
-            </LinearGradient>
-
+          <View style={styles.incidentCard}>
             {/* Content */}
             <View style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <Text style={styles.metricName} numberOfLines={1}>
                   {formatMetricName(item.trigger_metric)}
                 </Text>
-                
-                <View style={styles.badges}>
-                  <View
-                    style={[
-                      styles.severityBadge,
-                      { backgroundColor: getSeverityColor(item.severity) },
-                    ]}
-                  >
-                    <Text style={styles.badgeText}>
-                      {item.severity?.toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
               </View>
 
               <Text style={styles.message} numberOfLines={2}>
@@ -729,7 +697,6 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
-    borderLeftWidth: 5,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.15)",
     shadowColor: "#000",

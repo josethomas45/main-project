@@ -69,6 +69,7 @@ export default function MaintenanceTracking() {
   const [rules, setRules] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -112,6 +113,7 @@ export default function MaintenanceTracking() {
   };
 
   const handleAddReminder = async () => {
+    if (isSubmitting) return;
     if (!newReminder.service_type) {
       Alert.alert("Error", "Select service type");
       return;
@@ -125,27 +127,14 @@ export default function MaintenanceTracking() {
       return;
     }
 
-    // Get vehicle ID — try context first, then fetch from backend
-    let vehicleId = currentVehicle?.id;
-    if (!vehicleId) {
-      console.log("handleAddReminder: currentVehicle is null, fetching from backend...");
-      const result = await checkCurrentVehicle();
-      vehicleId = result?.vehicle?.id;
-    }
-
+    const vehicleId = currentVehicle?.id;
     if (!vehicleId) {
       Alert.alert("Error", "No vehicle selected. Please go to Dashboard and ensure a vehicle is active.");
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      console.log("Creating maintenance with:", {
-        vehicle_id: vehicleId,
-        service_type: newReminder.service_type,
-        service_date: newReminder.service_date,
-        odometer_km: selectedRule?.requires_odometer ? Number(newReminder.odometer_km) : null,
-        notes: newReminder.notes || null,
-      });
       const newRecord = await createMaintenance(
         {
           vehicle_id: vehicleId,
@@ -167,7 +156,6 @@ export default function MaintenanceTracking() {
         odometer_km: "",
       });
 
-      // Schedule notification for next due date
       const intervalMonths = selectedRule?.interval_months || 6;
       const serviceDate = new Date(newReminder.service_date);
       const dueDate = new Date(serviceDate);
@@ -187,6 +175,8 @@ export default function MaintenanceTracking() {
       );
     } catch {
       Alert.alert("Error", "Failed to add maintenance");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -202,6 +192,7 @@ export default function MaintenanceTracking() {
   };
 
   const handleUpdateReminder = async () => {
+    if (isSubmitting) return;
     if (!editingReminder) return;
 
     if (
@@ -212,6 +203,7 @@ export default function MaintenanceTracking() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await updateMaintenance(
         editingReminder.id,
@@ -239,6 +231,8 @@ export default function MaintenanceTracking() {
       Alert.alert("Success", "Maintenance updated");
     } catch {
       Alert.alert("Error", "Failed to update maintenance");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
