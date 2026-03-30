@@ -72,20 +72,14 @@ export default function ChatHistory() {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  // Background location for workshops
+  // Background location for discovery
   const [location, setLocation] = useState(null);
 
+  // Fetch location once on mount
   useEffect(() => {
-    const fetchLocation = async () => {
-      try {
-        const loc = await getDeviceLocation();
-        setLocation(loc);
-        console.log("[History] Background location fetched:", loc);
-      } catch (err) {
-        console.warn("[History] Failed to fetch background location:", err);
-      }
-    };
-    fetchLocation();
+    getDeviceLocation()
+      .then((loc) => setLocation(loc))
+      .catch((err) => console.log("Background location fetch failed:", err));
   }, []);
 
   // Voice features state
@@ -261,6 +255,7 @@ export default function ChatHistory() {
           if (row.response_ai) {
             // Try to parse and format AI response
             let aiText = row.response_ai;
+            let mapsUrls = null;
             
             // Check if response is JSON format
             try {
@@ -268,6 +263,8 @@ export default function ChatHistory() {
                 ? JSON.parse(row.response_ai) 
                 : row.response_ai;
               
+              mapsUrls = parsed.maps_urls || null;
+
               // Format the response
               let formatted = "";
               if (parsed.diagnosis) formatted += `🔍 Diagnosis:\n${parsed.diagnosis}\n\n`;
@@ -462,9 +459,11 @@ export default function ChatHistory() {
         },
         body: JSON.stringify({ 
           message: userText,
-          latitude: location?.latitude,
-          longitude: location?.longitude,
-          chat_id: selectedChat?.id || params.chatId
+          chat_id: selectedChat?.id || params.chatId || null,
+          ...(location && {
+            latitude: location.latitude,
+            longitude: location.longitude,
+          })
         }),
       });
 
@@ -498,16 +497,17 @@ export default function ChatHistory() {
         aiText += "\n";
       }
 
-      // Consolidate workshop results into the main bubble if present
+      let finalAiText = aiText.trim() || "⚠️ No response from agent";
+
+      // If the backend returned workshop results, append maps_urls to the main response
       if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
-        aiText += "\n\n📍 Nearby workshops:\n" + 
-          data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n");
+        finalAiText += "\n\n📍 Nearby workshops:\n" + data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n");
       }
 
       const aiMsg = {
         id: data.chat_id || `ai-${Date.now()}`,
         sender: "ai",
-        text: aiText.trim() || "⚠️ No response from agent",
+        text: finalAiText,
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -1276,6 +1276,63 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
+  },
+
+  // ── Loading ──
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
   },
   speakerButton: {
     alignSelf: "flex-end",

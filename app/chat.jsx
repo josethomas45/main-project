@@ -103,6 +103,14 @@ function formatAIResponse(data) {
     text += "\n";
   }
 
+  if (Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
+    text += "📍 Nearby Workshops:\n";
+    data.maps_urls.forEach((url, i) => {
+      text += `${i + 1}. ${url}\n`;
+    });
+    text += "\n";
+  }
+
   return text.trim() || "⚠️ No response from agent";
 }
 
@@ -149,39 +157,15 @@ export default function Chat() {
   // Threading state
   const [currentChatId, setCurrentChatId] = useState(chatId || null);
 
-  // Background location for workshops
+  // Background location for discovery
   const [location, setLocation] = useState(null);
 
+  // Fetch location once on mount
   useEffect(() => {
-    const fetchLocation = async () => {
-      try {
-        const loc = await getDeviceLocation();
-        setLocation(loc);
-        console.log("[Chat] Background location fetched:", loc);
-      } catch (err) {
-        console.warn("[Chat] Failed to fetch background location:", err);
-      }
-    };
-    fetchLocation();
+    getDeviceLocation()
+      .then(loc => setLocation(loc))
+      .catch(err => console.log("Background location fetch failed:", err));
   }, []);
-
-  // Handle auto-starting conversation from Issue Context (Demo Mode)
-  useEffect(() => {
-    if (params.issue_context) {
-      try {
-        const context = JSON.parse(params.issue_context);
-        if (context.initial_query) {
-          // Send the initial analysis request automatically
-          console.log("[Chat] Auto-starting diagnostic for issue:", context.code);
-          setTimeout(() => {
-            sendMessage(context.initial_query);
-          }, 500);
-        }
-      } catch (err) {
-        console.error("[Chat] Failed to parse issue_context:", err);
-      }
-    }
-  }, [params.issue_context]);
 
   // Register speech recognition events
   useSpeechRecognitionEvent("start", () => setIsRecording(true));
@@ -278,9 +262,11 @@ export default function Chat() {
       },
       body: JSON.stringify({ 
         message: text,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        ...(currentChatId && { chat_id: currentChatId })
+        chat_id: currentChatId || null,
+        ...(location && {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        })
       }),
     });
 
@@ -318,10 +304,9 @@ export default function Chat() {
 
       let aiText = formatAIResponse(data);
 
-      // Consolidate workshop results into the main bubble if present
+      // If the backend returned workshop results, append maps_urls to the main response
       if (data.action === "WORKSHOP_RESULTS" && Array.isArray(data.maps_urls) && data.maps_urls.length > 0) {
-        aiText += "\n\n📍 Nearby workshops:\n" + 
-          data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n");
+        aiText += "\n\n📍 Nearby workshops:\n" + data.maps_urls.map((u, i) => `${i + 1}. ${u}`).join("\n\n");
       }
 
       setMessages((prev) => [
@@ -831,6 +816,55 @@ const styles = StyleSheet.create({
     color: "#a5b4fc",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  workshopContainer: {
+    marginTop: 12,
+    width: "100%",
+  },
+  workshopHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  workshopList: {
+    paddingRight: 10,
+  },
+  workshopCard: {
+    width: 140,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.15)",
+  },
+  workshopCardGradient: {
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 110,
+  },
+  workshopCardTitle: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  openMapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(99,102,241,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openMapText: {
+    color: "#a5b4fc",
+    fontSize: 11,
+    fontWeight: "700",
+    marginRight: 4,
   },
 
   // ── Input Bar (Floating Glass Composer) ──
