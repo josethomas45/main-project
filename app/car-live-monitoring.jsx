@@ -2,7 +2,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Animated,
   Dimensions,
@@ -16,28 +16,30 @@ import {
 } from "react-native";
 import { useVehicle } from "../contexts/VehicleContext";
 import Sidebar from "../components/Sidebar";
+import OBDConnectionManager from "../utils/OBDConnectionManager";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// ── Simulated live metric generator ──────────────────────────────────────────
-function generateMetrics(prev) {
-  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-  const jitter = (v, delta) => v + (Math.random() - 0.5) * delta;
+// Default metrics when no data has arrived yet
+const DEFAULT_METRICS = {
+  speed: 0,
+  rpm: 0,
+  engineTemp: 0,
+  fuelLevel: 0,
+  battery: 0,
+  oilPressure: 0,
+};
 
+// Map decoded OBD data from WebSocket to our UI metric keys
+function mapDecodedToMetrics(decoded) {
+  if (!decoded) return null;
   return {
-    speed:       clamp(jitter(prev?.speed       ?? 60,  8), 0,   220),
-    rpm:         clamp(jitter(prev?.rpm         ?? 2200, 300), 600, 7000),
-    engineTemp:  clamp(jitter(prev?.engineTemp  ?? 92,  2), 60,  130),
-    fuelLevel:   clamp(jitter(prev?.fuelLevel   ?? 68,  0.4), 0,  100),
-    battery:     clamp(jitter(prev?.battery     ?? 12.6, 0.05), 10, 15),
-    oilPressure: clamp(jitter(prev?.oilPressure ?? 42,  2), 20,  80),
-    throttle:    clamp(jitter(prev?.throttle    ?? 28,  5), 0,   100),
-    tireFL:      clamp(jitter(prev?.tireFL      ?? 34,  0.3), 25, 45),
-    tireFR:      clamp(jitter(prev?.tireFR      ?? 33,  0.3), 25, 45),
-    tireRL:      clamp(jitter(prev?.tireRL      ?? 33,  0.3), 25, 45),
-    tireRR:      clamp(jitter(prev?.tireRR      ?? 34,  0.3), 25, 45),
-    latitude:    clamp(jitter(prev?.latitude    ?? 37.7749, 0.001), -90, 90),
-    longitude:   clamp(jitter(prev?.longitude   ?? -122.4194, 0.001), -180, 180),
+    speed:       decoded.speed       ?? decoded.vehicle_speed  ?? 0,
+    rpm:         decoded.rpm         ?? decoded.engine_rpm     ?? 0,
+    engineTemp:  decoded.coolant_temp ?? decoded.engine_temp   ?? decoded.engineTemp ?? 0,
+    fuelLevel:   decoded.fuel_level   ?? decoded.fuelLevel     ?? 0,
+    battery:     decoded.voltage      ?? decoded.battery       ?? decoded.control_module_voltage ?? 0,
+    oilPressure: decoded.oil_pressure ?? decoded.oilPressure   ?? 0,
   };
 }
 
@@ -316,25 +318,69 @@ export default function CarLiveMonitoring() {
   const router = useRouter();
 
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [metrics, setMetrics] = useState(generateMetrics(null));
+  const [metrics, setMetrics] = useState(DEFAULT_METRICS);
   const [isLive, setIsLive] = useState(true);
   const [elapsed, setElapsed] = useState(0);
+  const [wsConnected, setWsConnected] = useState(OBDConnectionManager.isConnected());
+  const [lastDataAt, setLastDataAt] = useState(null);
 
-  const intervalRef = useRef(null);
   const elapsedRef = useRef(0);
+  const timerRef = useRef(null);
+  const statusPingRef = useRef(null);
 
+  // ── Subscribe to live WebSocket data ──
   useEffect(() => {
-    if (!isLive) {
-      clearInterval(intervalRef.current);
-      return;
-    }
-    intervalRef.current = setInterval(() => {
-      setMetrics((prev) => generateMetrics(prev));
-      elapsedRef.current += 2;
-      setElapsed(elapsedRef.current);
-    }, 2500);
-    return () => clearInterval(intervalRef.current);
+    const unsubStatus = OBDConnectionManager.onStatusChange((connected) => {
+      setWsConnected(connected);
+    });
+
+    const unsubData = OBDConnectionManager.onData((data) => {
+      if (!isLive) return;
+      const mapped = mapDecodedToMetrics(data?.decoded);
+      if (mapped) {
+        setMetrics(mapped);
+        setLastDataAt(new Date());
+      }
+    });
+
+    return () => {
+      unsubStatus();
+      unsubData();
+    };
   }, [isLive]);
+
+  // ── Session elapsed timer (1s tick) ──
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      elapsedRef.current += 1;
+      setElapsed(elapsedRef.current);
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  // ── Ping engine & system status every 5 minutes ──
+  useEffect(() => {
+    const sendStatusPing = () => {
+      if (!OBDConnectionManager.isConnected()) return;
+      OBDConnectionManager.send({
+        type: "request_status",
+        commands: ["engine_status", "system_status"],
+        timestamp: new Date().toISOString(),
+      });
+      console.log("[LiveMonitor] Sent engine/system status ping");
+    };
+
+    // Send initial ping after 5s (let WS settle)
+    const initialPing = setTimeout(sendStatusPing, 5000);
+
+    // Then every 5 minutes
+    statusPingRef.current = setInterval(sendStatusPing, 5 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialPing);
+      clearInterval(statusPingRef.current);
+    };
+  }, []);
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -376,9 +422,11 @@ export default function CarLiveMonitoring() {
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={styles.headerTitle}>Live Monitoring</Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
-            <PulseDot />
-            <Text style={styles.headerSub}>
-              {isLive ? "LIVE" : "PAUSED"} · {formatTime(elapsed)}
+            {wsConnected && isLive ? <PulseDot /> : (
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: wsConnected ? "#f59e0b" : "#ef4444" }} />
+            )}
+            <Text style={[styles.headerSub, !wsConnected && { color: "#ef4444" }]}>
+              {!wsConnected ? "DISCONNECTED" : isLive ? "LIVE" : "PAUSED"} · {formatTime(elapsed)}
             </Text>
           </View>
         </View>
@@ -427,14 +475,14 @@ export default function CarLiveMonitoring() {
             <Text style={styles.vehicleBannerText}>{vehicleName}</Text>
             <View
               style={{
-                backgroundColor: "rgba(16,185,129,0.2)",
+                backgroundColor: wsConnected ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)",
                 paddingHorizontal: 10,
                 paddingVertical: 3,
                 borderRadius: 10,
               }}
             >
-              <Text style={{ color: "#10b981", fontSize: 11, fontWeight: "700" }}>
-                ACTIVE
+              <Text style={{ color: wsConnected ? "#10b981" : "#ef4444", fontSize: 11, fontWeight: "700" }}>
+                {wsConnected ? "CONNECTED" : "OFFLINE"}
               </Text>
             </View>
           </LinearGradient>
