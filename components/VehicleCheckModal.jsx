@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, TouchableOpacity } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -324,8 +324,9 @@ export default function VehicleCheckModal({ visible, onComplete }) {
         // Prevent closing - this is a blocking modal
       }}
     >
-      <View style={styles.modalBackdrop}>
-        {/* Background gradient */}
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.modalBackdrop}>
+          {/* Background gradient */}
         <LinearGradient
           colors={['#1e293b', '#0f172a', '#0f172a']}
           style={StyleSheet.absoluteFill}
@@ -505,6 +506,7 @@ export default function VehicleCheckModal({ visible, onComplete }) {
           </Animated.View>
         </Animated.View>
       </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
