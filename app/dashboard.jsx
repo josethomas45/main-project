@@ -12,9 +12,10 @@ import {
     StatusBar,
     StyleSheet,
     Text,
-    TouchableOpacity,
+    TouchableOpacity as RNTouchableOpacity,
     View,
 } from "react-native";
+import { TouchableOpacity } from "react-native-gesture-handler";
 import Animated, {
     FadeInDown,
     FadeInUp,
@@ -240,7 +241,7 @@ export default function Dashboard() {
                 animationType="none"
                 onRequestClose={() => setShowMenu(false)}
             >
-                <TouchableOpacity
+                <RNTouchableOpacity
                     style={styles.modalOverlay}
                     activeOpacity={1}
                     onPress={() => setShowMenu(false)}
@@ -250,7 +251,7 @@ export default function Dashboard() {
                             entering={FadeInDown.duration(200)}
                             style={styles.popupMenu}
                         >
-                            <TouchableOpacity
+                            <RNTouchableOpacity
                                 style={styles.menuItem}
                                 onPress={() => {
                                     setShowMenu(false);
@@ -260,11 +261,11 @@ export default function Dashboard() {
                             >
                                 <Ionicons name="person-outline" size={20} color="#f1f5f9" />
                                 <Text style={styles.menuText}>Profile</Text>
-                            </TouchableOpacity>
+                            </RNTouchableOpacity>
 
                             <View style={styles.menuDivider} />
 
-                            <TouchableOpacity
+                            <RNTouchableOpacity
                                 style={styles.menuItem}
                                 onPress={() => {
                                     setShowMenu(false);
@@ -274,10 +275,10 @@ export default function Dashboard() {
                             >
                                 <Ionicons name="log-out-outline" size={20} color="#ef4444" />
                                 <Text style={[styles.menuText, { color: "#ef4444" }]}>Logout</Text>
-                            </TouchableOpacity>
+                            </RNTouchableOpacity>
                         </Animated.View>
                     </View>
-                </TouchableOpacity>
+                </RNTouchableOpacity>
             </Modal>
 
             <ScrollView

@@ -8,9 +8,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
   FadeInDown,

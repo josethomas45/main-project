@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useRef } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { VehicleProvider } from "../contexts/VehicleContext";
 import {
   initNotifications,
@@ -111,10 +112,12 @@ export default function RootLayout() {
   }
 
   return (
-    <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
-      <VehicleProvider>
-        <RootLayoutNav />
-      </VehicleProvider>
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
+        <VehicleProvider>
+          <RootLayoutNav />
+        </VehicleProvider>
+      </ClerkProvider>
+    </GestureHandlerRootView>
   );
-}
+}
